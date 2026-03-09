@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ctxr.me — Context Readme for the web</title>
+  <meta name="description" content="Prepend ctxr.me/ to any URL to get clean markdown ready for LLMs." />
+  <meta property="og:title" content="ctxr.me — Context Readme for the web" />
+  <meta property="og:description" content="Prepend ctxr.me/ to any URL to get clean markdown ready for LLMs." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#050505" />
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="toast" id="toast"><span class="toast-dot"></span><span id="toastMsg">Copied</span></div>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-inner">
+      <a class="nav-logo" href="#"><em>ctxr</em>.me</a>
+      <div class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="https://github.com/iamanishroy/ctxr.me" class="nav-gh">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══ HERO ═══ -->
+  <section class="hero">
+    <div class="hero-glow-l"></div>
+    <div class="hero-glow-r"></div>
+
+    <!-- LEFT: copy -->
+    <div class="hero-left">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Context Readme for the web
+      </div>
+
+      <h1 class="hero-title">
+        <span class="hero-title-main">ctxr.me</span>
+        <span class="hero-title-sub">prepend any URL → get clean markdown</span>
+      </h1>
+
+      <p class="hero-desc">
+        Turn any webpage into <strong>structured, LLM-ready markdown</strong> in seconds.
+        Works with curl, fetch, scripts, and agents. Zero setup.
+      </p>
+
+      <div class="hero-actions">
+        <a href="https://github.com/iamanishroy/ctxr.me" class="btn btn-primary">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Star on GitHub
+        </a>
+        <a href="#how" class="btn btn-secondary">How it works ↓</a>
+      </div>
+    </div>
+
+    <!-- RIGHT: interactive widget -->
+    <div class="hero-right">
+      <div class="hw-widget">
+        <!-- chrome -->
+        <div class="hw-bar">
+          <span class="hw-dot hw-dot-r"></span>
+          <span class="hw-dot hw-dot-y"></span>
+          <span class="hw-dot hw-dot-g"></span>
+          <span class="hw-bar-label">ctxr.me — live preview</span>
+        </div>
+
+        <!-- input -->
+        <div class="hw-input-section">
+          <div class="hw-input-row">
+            <span class="hw-prefix">ctxr.me/</span>
+            <span class="hw-sep"></span>
+            <input id="hwInput" class="hw-input" type="url"
+              placeholder="https://paste-any-url.com"
+              autocomplete="off" spellcheck="false"
+              oninput="hwUpdate()" onkeydown="if(event.key==='Enter')hwGo()" />
+            <button class="hw-go" id="hwGoBtn" onclick="hwGo()" disabled>
+              Run
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+          <!-- chips -->
+          <div class="hw-chips">
+            <span class="hw-chips-label">Try:</span>
+            <button class="hw-chip" onclick="hwChip('https://news.ycombinator.com')">Hacker News</button>
+            <button class="hw-chip" onclick="hwChip('https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)')">Wikipedia</button>
+            <button class="hw-chip" onclick="hwChip('https://www.npmjs.com/package/zod')">npm/zod</button>
+            <button class="hw-chip" onclick="hwChip('https://docs.anthropic.com')">Anthropic</button>
+          </div>
+        </div>
+
+        <!-- output -->
+        <div class="hw-output">
+          <div class="hw-output-bar">
+            <svg class="hw-out-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span class="hw-out-url" id="hwOutTitle">output will appear here</span>
+            <div class="hw-actions">
+              <button class="hw-action-btn" id="hwCopyUrlBtn" onclick="hwCopyUrl()" disabled>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                copy url
+              </button>
+              <button class="hw-action-btn" id="hwCopyMdBtn" onclick="hwCopyMarkdown()" disabled>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                copy md
+              </button>
+            </div>
+          </div>
+
+          <div class="hw-output-body" id="hwOutputBody">
+            <div class="hw-skeleton">
+              <div class="hw-sk-line" style="width:55px;height:11px"></div>
+              <div class="hw-sk-line" style="width:88%;margin-top:2px"></div>
+              <div class="hw-sk-line" style="width:70%;opacity:0.6"></div>
+              <div style="height:8px"></div>
+              <div class="hw-sk-line" style="width:44px;height:10px;opacity:0.5"></div>
+              <div class="hw-sk-line" style="width:80%;opacity:0.4"></div>
+              <div class="hw-sk-line" style="width:73%;opacity:0.3"></div>
+              <div class="hw-sk-line" style="width:68%;opacity:0.25"></div>
+              <div class="hw-sk-line" style="width:75%;opacity:0.2"></div>
+              <p class="hw-sk-hint">↑ paste a URL or pick an example above</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- scroll cue -->
+    <div class="scroll-cue">
+      <span>scroll</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="container fade-up">
+      <p class="section-label">// How it works</p>
+      <h2 class="section-title">Three steps.<br>No setup.</h2>
+      <p class="section-desc">Works instantly with any URL — browser, curl, scripts, or AI agents.</p>
+      <div class="steps">
+        <div class="step">
+          <p class="step-num">01</p>
+          <span class="step-icon">🌐</span>
+          <h3 class="step-title">Take any webpage</h3>
+          <p class="step-desc">Any URL — docs, articles, wikis, npm packages, GitHub repos, or any live page on the web.</p>
+        </div>
+        <div class="step">
+          <p class="step-num">02</p>
+          <span class="step-icon">⚡</span>
+          <h3 class="step-title">Prepend ctxr.me/</h3>
+          <p class="step-desc">Just prefix the URL. No config, no API key, no install needed.</p>
+          <span class="step-code">ctxr.me/https://…</span>
+        </div>
+        <div class="step">
+          <p class="step-num">03</p>
+          <span class="step-icon">✦</span>
+          <h3 class="step-title">Get clean markdown</h3>
+          <p class="step-desc">Structured, noise-free markdown. Optimized for prompts, RAG pipelines, and agents.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- TERMINAL DEMO -->
+  <section id="terminal">
+    <div class="container fade-up">
+      <p class="section-label">// Terminal demo</p>
+      <h2 class="section-title">Works with curl,<br>fetch, anything.</h2>
+      <p class="section-desc">Plain HTTP. No auth, no SDK. Pipe directly into any pipeline.</p>
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+          <span class="terminal-title">bash — 80×24</span>
+        </div>
+        <div class="terminal-body">
+          <div><span class="t-prompt">$ </span><span class="t-cmd">curl ctxr.me/https://news.ycombinator.com</span></div>
+          <span class="t-gap"></span>
+          <div class="t-h1"># Hacker News</div>
+          <span class="t-gap"></span>
+          <div class="t-h2">## Summary</div>
+          <div class="t-text">Front page stories and community discussions for developers and hackers.</div>
+          <span class="t-gap"></span>
+          <div class="t-h2">## Top Stories</div>
+          <div class="t-bullet">• <span>Ask HN: How do you manage LLM context windows in production?</span></div>
+          <div class="t-bullet">• <span>Postgres 17 released — major performance improvements</span></div>
+          <div class="t-bullet">• <span>I built a self-hosted Notion alternative in a weekend</span></div>
+          <div class="t-bullet">• <span>Show HN: ctxr.me — any URL as clean LLM context</span></div>
+          <span class="t-gap"></span>
+          <div class="t-comment">## Links · ## Comments</div>
+          <span class="t-gap"></span>
+          <div class="t-comment"><span class="t-prompt">$ </span>▋</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- LLM DEMO -->
+  <section id="llm">
+    <div class="container fade-up">
+      <p class="section-label">// LLM prompt demo</p>
+      <h2 class="section-title">Drop it in any prompt.<br>Instant context.</h2>
+      <p class="section-desc">Reference any documentation, article, or package directly inside your prompt.</p>
+      <div class="llm-cols">
+        <div class="llm-col">
+          <div class="llm-col-label">Prompt</div>
+          <pre class="llm-code">You are a senior JavaScript developer.
+
+Use this package reference:
+<span class="llm-hi">ctxr.me/https://npmjs.com/package/flamecache</span>
+
+Explain how to use this library
+and provide a quick usage example.</pre>
+        </div>
+        <div class="llm-col">
+          <div class="llm-col-label">Response</div>
+          <pre class="llm-code">Flamecache is a lightweight in-memory
+caching library for Node.js.
+
+<span class="llm-bright">import { cache } from "flamecache"
+
+const getUser = cache(async (id) => {
+  return db.users.find(id)
+})
+
+// First call hits DB
+await getUser(42)
+
+// Subsequent calls: instant cache
+await getUser(42)</span></pre>
+        </div>
+      </div>
+      <p class="llm-tagline">Give LLMs the context they actually need.</p>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="container fade-up">
+      <p class="section-label">// Features</p>
+      <h2 class="section-title">Built for developers.<br>Optimized for LLMs.</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">✦</span>
+          <h3 class="feature-title">LLM Ready</h3>
+          <p class="feature-desc">Clean markdown stripped of nav, ads, and boilerplate. Maximized signal-to-noise ratio for prompts and RAG.</p>
+          <span class="feature-tag">prompt · rag · agents</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">⚡</span>
+          <h3 class="feature-title">Zero Setup</h3>
+          <p class="feature-desc">Just prepend <code style="font-family:var(--mono);color:var(--accent);font-size:11px">ctxr.me/</code> to any URL. No account, no API key, no install.</p>
+          <span class="feature-tag">instant · no config</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🌐</span>
+          <h3 class="feature-title">Works Everywhere</h3>
+          <p class="feature-desc">Browser, curl, fetch, Python scripts, AI agents. Plain HTTP — no special client needed.</p>
+          <span class="feature-tag">curl · browser · scripts</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">◎</span>
+          <h3 class="feature-title">Open Source</h3>
+          <p class="feature-desc">MIT licensed. Fork it, self-host it, or build on top. Pull requests welcome.</p>
+          <span class="feature-tag">mit · self-host · fork</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- OPEN SOURCE -->
+  <section id="oss">
+    <div class="container fade-up">
+      <div class="oss-block">
+        <div class="oss-grid-bg"></div>
+        <div class="oss-glow"></div>
+        <p class="section-label" style="margin-bottom:16px;position:relative">// Open Source</p>
+        <h2 class="oss-title">ctxr.me is open source.</h2>
+        <p class="oss-desc">Fork it, self-host it, or build on it.<br>MIT licensed. Pull requests welcome.</p>
+        <div class="oss-buttons">
+          <a href="https://github.com/iamanishroy/ctxr.me" class="btn btn-primary">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            Star on GitHub
+          </a>
+          <a href="https://github.com/iamanishroy/ctxr.me" class="btn btn-secondary">View source</a>
+        </div>
+        <p class="oss-meta">MIT License · deploy on Cloudflare Workers</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <div class="footer-name" style="font-family:var(--mono)"><em style="color:var(--accent);font-style:normal">ctxr</em>.me <span class="footer-sep">//</span> <span class="footer-tagline"></span>README for the web</span></div>
+          <div class="footer-author">Built by <a href="https://anishroy.com">Anish Roy</a></div>
+        </div>
+        <div class="footer-links">
+          <a href="#how">How it works</a>
+          <a href="#features">Features</a>
+          <a href="https://github.com/iamanishroy/ctxr.me">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/app.js?v=2" defer></script>
+</body>
+</html>
