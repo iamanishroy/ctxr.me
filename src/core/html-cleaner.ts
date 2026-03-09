@@ -8,6 +8,14 @@ import { extractRscContent } from "./rsc-extractor";
 
 const MIN_WORD_COUNT = 50;
 
+/** Count words in an HTML string (strips tags first). */
+function countWords(html: string): number {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
 /** Non-content selectors to remove during manual cleaning. */
 const REMOVE_SELECTORS = [
   "script, style, noscript, iframe, svg",
@@ -40,11 +48,12 @@ const CONTENT_SELECTORS = [
 export function cleanHtml(
   $: cheerio.CheerioAPI,
   baseUrl: string,
+  rawHtml?: string,
 ): CleanedContent {
   fixRelativeUrls($, baseUrl);
 
-  // Grab RSC content NOW — before Readability or manualClean strip script tags
-  const rscContent = extractRscContent($);
+  // Only scan for RSC payloads on Next.js pages (fast string check)
+  const rscContent = rawHtml?.includes("__next_f") ? extractRscContent($) : "";
 
   // Track the best result we have so far
   let bestHtml = "";
@@ -72,10 +81,7 @@ export function cleanHtml(
       bestTitle = result.title || undefined;
       bestExcerpt = result.excerpt || undefined;
 
-      const wordCount = bestHtml
-        .replace(/<[^>]*>/g, "")
-        .split(/\s+/)
-        .filter(Boolean).length;
+      const wordCount = countWords(bestHtml);
 
       // If we got enough content, return immediately
       if (wordCount >= MIN_WORD_COUNT) {
@@ -97,18 +103,9 @@ export function cleanHtml(
 
   // Fallback: manual cleaning
   const manualResult = manualClean($);
-  const manualWords = manualResult
-    .replace(/<[^>]*>/g, "")
-    .split(/\s+/)
-    .filter(Boolean).length;
+  const manualWords = countWords(manualResult);
 
-  if (
-    manualWords >
-    bestHtml
-      .replace(/<[^>]*>/g, "")
-      .split(/\s+/)
-      .filter(Boolean).length
-  ) {
+  if (manualWords > countWords(bestHtml)) {
     bestHtml = manualResult;
   }
 
@@ -129,27 +126,28 @@ function manualClean($: cheerio.CheerioAPI): string {
     }
 
     // Try content selectors in priority order
-    let mainContent: string | null = null;
+    let contentEl = null;
     for (const selector of CONTENT_SELECTORS) {
-      mainContent = $(selector).first().html();
-      if (mainContent?.trim()) break;
+      const found = $(selector).first();
+      if (found.length && found.html()?.trim()) {
+        contentEl = found;
+        break;
+      }
     }
 
-    const html = mainContent?.trim() || $("body").html()?.trim() || "";
-    if (!html) return html;
+    const target = contentEl || $("body");
 
-    // Strip empty elements
-    const content$ = cheerio.load(html, { xml: { xmlMode: false } });
-    content$("p, div, span").each((_, el) => {
-      const text = content$(el).text().trim();
-      if (!text && !content$(el).children().length) {
-        content$(el).remove();
+    // Strip empty elements in-place (no extra cheerio.load)
+    target.find("p, div, span").each((_, el) => {
+      const $el = $(el);
+      if (!$el.text().trim() && !$el.children().length) {
+        $el.remove();
       }
     });
 
-    return content$.html()?.trim() || html;
+    return target.html()?.trim() || "";
   } catch (error) {
-    console.warn("Manual cleaning also failed:", error);
+    console.warn("Manual cleaning failed:", error);
     try {
       return $("body").html()?.trim() || "";
     } catch {

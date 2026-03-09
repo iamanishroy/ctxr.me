@@ -97,7 +97,7 @@ read.get("/*", async (c) => {
       cleanedHtml: cleaned,
       title: readabilityTitle,
       excerpt: readabilityExcerpt,
-    } = cleanHtml(scraped.$, targetUrl);
+    } = cleanHtml(scraped.$, targetUrl, scraped.rawHtml);
     const markdown = htmlToMarkdown(cleaned);
 
     // Prefer Readability's title/excerpt when scraped ones are empty

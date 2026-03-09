@@ -12,7 +12,8 @@ const BROWSER_HEADERS = {
   Pragma: "no-cache",
 };
 
-const FETCH_TIMEOUT = 30000; // 30 seconds
+const FETCH_TIMEOUT = 30000;
+const MAX_HTML_BYTES = 512_000; // 512KB — larger pages rarely have useful content beyond this
 
 /**
  * Fetches HTML from a URL and extracts metadata
@@ -43,7 +44,13 @@ export async function scrape(url: string): Promise<ScrapedData> {
       throw new Error(`Unsupported content type: ${contentType}`);
     }
 
-    const rawHtml = await response.text();
+    let rawHtml = await response.text();
+
+    // Truncate very large HTML to avoid CPU spikes during parsing
+    if (rawHtml.length > MAX_HTML_BYTES) {
+      rawHtml = rawHtml.substring(0, MAX_HTML_BYTES);
+    }
+
     const $ = cheerio.load(rawHtml);
 
     const title = extractTitle($);
@@ -88,7 +95,7 @@ function extractDescription($: cheerio.CheerioAPI): string {
 function extractMetadata($: cheerio.CheerioAPI, baseUrl: string): PageMetadata {
   const metadata: PageMetadata = {};
 
-  // Basic metadata
+  // Only extract fields used by buildMetadataHeader
   metadata.title = extractTitle($);
   metadata.description = extractDescription($);
   metadata.language = $("html").attr("lang") || undefined;
@@ -96,10 +103,8 @@ function extractMetadata($: cheerio.CheerioAPI, baseUrl: string): PageMetadata {
     $('link[rel="canonical"]').attr("href"),
     baseUrl,
   );
-  metadata.robots = $('meta[name="robots"]').attr("content") || undefined;
   metadata.author = $('meta[name="author"]').attr("content") || undefined;
 
-  // Keywords
   const keywords = $('meta[name="keywords"]').attr("content");
   if (keywords) {
     metadata.keywords = keywords
@@ -108,43 +113,9 @@ function extractMetadata($: cheerio.CheerioAPI, baseUrl: string): PageMetadata {
       .filter(Boolean);
   }
 
-  // Favicon
-  metadata.favicon = resolveUrl(
-    $('link[rel="icon"]').attr("href") ||
-      $('link[rel="shortcut icon"]').attr("href") ||
-      $('link[rel="apple-touch-icon"]').attr("href"),
-    baseUrl,
-  );
-
-  // Open Graph
-  metadata.ogTitle =
-    $('meta[property="og:title"]').attr("content") || undefined;
-  metadata.ogDescription =
-    $('meta[property="og:description"]').attr("content") || undefined;
-  metadata.ogImage = resolveUrl(
-    $('meta[property="og:image"]').attr("content"),
-    baseUrl,
-  );
-  metadata.ogUrl = $('meta[property="og:url"]').attr("content") || undefined;
   metadata.ogType = $('meta[property="og:type"]').attr("content") || undefined;
   metadata.ogSiteName =
     $('meta[property="og:site_name"]').attr("content") || undefined;
-
-  // Twitter
-  metadata.twitterCard =
-    $('meta[name="twitter:card"]').attr("content") || undefined;
-  metadata.twitterSite =
-    $('meta[name="twitter:site"]').attr("content") || undefined;
-  metadata.twitterCreator =
-    $('meta[name="twitter:creator"]').attr("content") || undefined;
-  metadata.twitterTitle =
-    $('meta[name="twitter:title"]').attr("content") || undefined;
-  metadata.twitterDescription =
-    $('meta[name="twitter:description"]').attr("content") || undefined;
-  metadata.twitterImage = resolveUrl(
-    $('meta[name="twitter:image"]').attr("content"),
-    baseUrl,
-  );
 
   return metadata;
 }

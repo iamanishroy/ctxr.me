@@ -32,21 +32,10 @@ export const rateLimiter = () => {
     const count = (countResult.results[0] as { count: number }).count;
 
     if (count >= MAX_REQUESTS) {
-      // Find the oldest entry in the window to calculate retry-after
-      const oldest = await c.env.DB.prepare(
-        "SELECT MIN(timestamp) as oldest FROM rate_limits WHERE ip = ? AND timestamp >= ?",
-      )
-        .bind(ip, windowStart)
-        .first<{ oldest: number }>();
-
-      const retryAfter = oldest
-        ? oldest.oldest + WINDOW_SECONDS - now
-        : WINDOW_SECONDS;
-
       return c.json(
-        { error: "Rate limit exceeded", retryAfter: Math.max(retryAfter, 1) },
+        { error: "Rate limit exceeded", retryAfter: WINDOW_SECONDS },
         429,
-        { "Retry-After": String(Math.max(retryAfter, 1)) },
+        { "Retry-After": String(WINDOW_SECONDS) },
       );
     }
 
