@@ -167,7 +167,9 @@ ctxr.me deploys to **Cloudflare Workers** via GitHub Actions.
 
 Every push to `main` triggers a deploy via `.github/workflows/deploy.yml`.
 
-1. Add your `CLOUDFLARE_API_TOKEN` to GitHub Secrets
+1. Add the following to **GitHub Secrets** (Settings → Secrets → Actions):
+   - `CLOUDFLARE_API_TOKEN` — your Cloudflare API token
+   - `D1_DATABASE_ID` — your D1 database ID (from `wrangler d1 create`)
 2. Push to `main`
 3. Done
 
