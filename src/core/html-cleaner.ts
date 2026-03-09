@@ -4,6 +4,9 @@ import type { ReadabilityResult } from "@jsr/paoramen__cheer-reader";
 import type { CleanedContent } from "./types";
 import { stripLayoutTables } from "./table-utils";
 import { fixRelativeUrls } from "./url-fixer";
+import { extractRscContent } from "./rsc-extractor";
+
+const MIN_WORD_COUNT = 50;
 
 /** Non-content selectors to remove during manual cleaning. */
 const REMOVE_SELECTORS = [
@@ -40,6 +43,14 @@ export function cleanHtml(
 ): CleanedContent {
   fixRelativeUrls($, baseUrl);
 
+  // Grab RSC content NOW — before Readability or manualClean strip script tags
+  const rscContent = extractRscContent($);
+
+  // Track the best result we have so far
+  let bestHtml = "";
+  let bestTitle: string | undefined;
+  let bestExcerpt: string | undefined;
+
   // Primary: Readability extraction
   try {
     const result: ReadabilityResult = new Readability($, {
@@ -51,28 +62,61 @@ export function cleanHtml(
         xml: { xmlMode: false },
       });
 
-      // Clean up Readability artifacts
       const firstDiv = content$("div").first();
       if (firstDiv.attr("id") === "readability-page-1") {
         firstDiv.removeAttr("id");
       }
       stripLayoutTables(content$);
 
-      return {
-        cleanedHtml: content$.html() || "",
-        title: result.title || undefined,
-        excerpt: result.excerpt || undefined,
-      };
+      bestHtml = content$.html() || "";
+      bestTitle = result.title || undefined;
+      bestExcerpt = result.excerpt || undefined;
+
+      const wordCount = bestHtml
+        .replace(/<[^>]*>/g, "")
+        .split(/\s+/)
+        .filter(Boolean).length;
+
+      // If we got enough content, return immediately
+      if (wordCount >= MIN_WORD_COUNT) {
+        return {
+          cleanedHtml: bestHtml,
+          title: bestTitle,
+          excerpt: bestExcerpt,
+        };
+      }
     }
   } catch (error) {
-    console.warn(
-      "Readability extraction failed, falling back to manual cleaning:",
-      error,
-    );
+    console.warn("Readability extraction failed:", error);
+  }
+
+  // Try RSC content if Readability didn't get enough
+  if (rscContent) {
+    return { cleanedHtml: rscContent, title: bestTitle, excerpt: bestExcerpt };
   }
 
   // Fallback: manual cleaning
-  return { cleanedHtml: manualClean($) };
+  const manualResult = manualClean($);
+  const manualWords = manualResult
+    .replace(/<[^>]*>/g, "")
+    .split(/\s+/)
+    .filter(Boolean).length;
+
+  if (
+    manualWords >
+    bestHtml
+      .replace(/<[^>]*>/g, "")
+      .split(/\s+/)
+      .filter(Boolean).length
+  ) {
+    bestHtml = manualResult;
+  }
+
+  return {
+    cleanedHtml: bestHtml || manualResult,
+    title: bestTitle,
+    excerpt: bestExcerpt,
+  };
 }
 
 /**

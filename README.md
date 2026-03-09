@@ -52,9 +52,10 @@ GET /https://example.com
 │  2. Extract Content                     │
 │  html-cleaner.ts → Readability parses   │
 │  the main content, strips nav/ads/      │
-│  sidebars. Falls back to manual         │
-│  extraction via content selectors       │
-│  (main, article, [role="main"], etc.)   │
+│  sidebars. Falls back to:               │
+│    a) RSC extraction for Next.js pages  │
+│    b) Manual content selectors          │
+│       (main, article, #__next, etc.)    │
 │                                         │
 │         ▼                               │
 │  3. Convert to Markdown                 │
@@ -93,7 +94,8 @@ ctxr/
 │   └── core/
 │       ├── routes.ts        # GET /* handler + D1 caching
 │       ├── scrape.ts        # Fetch HTML + extract metadata
-│       ├── html-cleaner.ts  # Readability + manual fallback
+│       ├── html-cleaner.ts  # Readability + RSC + manual fallback
+│       ├── rsc-extractor.ts # Next.js RSC flight data parser
 │       ├── markdown.ts      # HTML → Markdown pipeline
 │       ├── md-cleaners.ts   # 8 post-processing cleaners
 │       ├── md-translators.ts # Custom code block translators
