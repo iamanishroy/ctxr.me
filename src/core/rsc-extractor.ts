@@ -1,23 +1,28 @@
-import type * as cheerio from "cheerio";
-
 /**
  * Extract content from Next.js RSC flight data.
- * Fallback for pages where content is in <script>self.__next_f.push()</script>
- * instead of the DOM.
+ * Works directly on raw HTML string — no cheerio needed.
+ * This is important because preStripHtml removes <script> tags
+ * before cheerio.load().
  */
-export function extractRscContent($: cheerio.CheerioAPI): string {
+export function extractRscContent(rawHtml: string): string {
+  // Fast bail: not a Next.js RSC page
+  if (!rawHtml.includes("__next_f")) return "";
+
+  // Extract payloads from self.__next_f.push([1,"..."]) in script tags
   const payloads: string[] = [];
+  const scriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  let scriptMatch;
 
-  $("script").each((_, el) => {
-    const raw = $(el).html() || "";
-    if (!raw.includes("__next_f")) return;
+  while ((scriptMatch = scriptRe.exec(rawHtml)) !== null) {
+    const raw = scriptMatch[1];
+    if (!raw.includes("__next_f")) continue;
 
-    const re = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+    const pushRe = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
     let m;
-    while ((m = re.exec(raw)) !== null) {
+    while ((m = pushRe.exec(raw)) !== null) {
       payloads.push(m[1]);
     }
-  });
+  }
 
   if (payloads.length === 0) return "";
 
@@ -43,7 +48,7 @@ export function extractRscContent($: cheerio.CheerioAPI): string {
     }
   }
 
-  // 2. Body text — long children strings (the primary extraction method)
+  // 2. Body text — long children strings
   const bodyRe = /"children"\s*:\s*"([^"]{40,})"/g;
   while ((match = bodyRe.exec(text)) !== null) {
     const clean = unescape(match[1]);

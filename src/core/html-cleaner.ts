@@ -52,8 +52,8 @@ export function cleanHtml(
 ): CleanedContent {
   fixRelativeUrls($, baseUrl);
 
-  // Only scan for RSC payloads on Next.js pages (fast string check)
-  const rscContent = rawHtml?.includes("__next_f") ? extractRscContent($) : "";
+  // Only scan for RSC payloads on Next.js pages (works on raw HTML string)
+  const rscContent = rawHtml ? extractRscContent(rawHtml) : "";
 
   // Track the best result we have so far
   let bestHtml = "";
