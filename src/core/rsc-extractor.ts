@@ -1,8 +1,7 @@
 /**
  * Extract content from Next.js RSC flight data.
  * Works directly on raw HTML string — no cheerio needed.
- * This is important because preStripHtml removes <script> tags
- * before cheerio.load().
+ * Preserves document order by extracting headings and body text in a single pass.
  */
 export function extractRscContent(rawHtml: string): string {
   // Fast bail: not a Next.js RSC page
@@ -34,21 +33,26 @@ export function extractRscContent(rawHtml: string): string {
     .replace(/\\"/g, '"')
     .replace(/\\\\/g, "\\");
 
-  const elements: string[] = [];
+  // Single pass: find all headings and long body text in order of appearance.
+  // Each match stores its index so we can sort by position.
+  const elements: { index: number; html: string }[] = [];
   const seen = new Set<string>();
 
-  // 1. Headings
+  // Headings: "as":"h1" ... "children":"text"
   const headingRe = /"as"\s*:\s*"(h[1-6])"[^}]*?"children"\s*:\s*"([^"]{3,})"/g;
   let match;
   while ((match = headingRe.exec(text)) !== null) {
     const clean = unescape(match[2]);
     if (clean && !seen.has(clean)) {
       seen.add(clean);
-      elements.push(`<${match[1]}>${clean}</${match[1]}>`);
+      elements.push({
+        index: match.index,
+        html: `<${match[1]}>${clean}</${match[1]}>`,
+      });
     }
   }
 
-  // 2. Body text — long children strings
+  // Body text: long "children":"..." strings
   const bodyRe = /"children"\s*:\s*"([^"]{40,})"/g;
   while ((match = bodyRe.exec(text)) !== null) {
     const clean = unescape(match[1]);
@@ -61,11 +65,14 @@ export function extractRscContent(rawHtml: string): string {
       !clean.startsWith("$")
     ) {
       seen.add(clean);
-      elements.push(`<p>${clean}</p>`);
+      elements.push({ index: match.index, html: `<p>${clean}</p>` });
     }
   }
 
-  return elements.join("\n");
+  // Sort by position in the RSC payload to preserve document order
+  elements.sort((a, b) => a.index - b.index);
+
+  return elements.map((e) => e.html).join("\n");
 }
 
 function unescape(s: string): string {

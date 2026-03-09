@@ -15,7 +15,7 @@ const BROWSER_HEADERS = {
 const FETCH_TIMEOUT = 30000;
 const MAX_HTML_BYTES = 256_000; // 256KB after stripping
 
-// Pre-compiled regex for stripping heavy non-content tags
+// Pre-compiled regex for stripping heavy non-content tags before cheerio
 const STRIP_PATTERNS = [
   /<script[^>]*>[\s\S]*?<\/script>/gi,
   /<style[^>]*>[\s\S]*?<\/style>/gi,
@@ -26,72 +26,7 @@ const STRIP_PATTERNS = [
 ];
 
 /**
- * Extract metadata from <head> using fast regex (no cheerio needed).
- */
-function extractMetadataFromHead(
-  html: string,
-  baseUrl: string,
-): {
-  title: string;
-  description: string;
-  metadata: PageMetadata;
-} {
-  const meta = (name: string): string => {
-    const re = new RegExp(
-      `<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']*?)["']|<meta[^>]+content=["']([^"']*?)["'][^>]+(?:name|property)=["']${name}["']`,
-      "i",
-    );
-    const m = html.match(re);
-    return m?.[1] || m?.[2] || "";
-  };
-
-  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  const title =
-    meta("og:title") || meta("twitter:title") || titleMatch?.[1]?.trim() || "";
-  const description = meta("description") || meta("og:description") || "";
-
-  const langMatch = html.match(/<html[^>]+lang=["']([^"']+)["']/i);
-  const canonicalMatch = html.match(
-    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*?)["']/i,
-  );
-  const keywordsStr = meta("keywords");
-
-  const metadata: PageMetadata = {
-    title,
-    description,
-    language: langMatch?.[1] || undefined,
-    canonical: canonicalMatch?.[1]
-      ? resolveUrl(canonicalMatch[1], baseUrl)
-      : undefined,
-    author: meta("author") || undefined,
-    keywords: keywordsStr
-      ? keywordsStr
-          .split(",")
-          .map((k) => k.trim())
-          .filter(Boolean)
-      : undefined,
-    ogType: meta("og:type") || undefined,
-    ogSiteName: meta("og:site_name") || undefined,
-  };
-
-  return { title, description, metadata };
-}
-
-/**
- * Strip heavy non-content tags from HTML string (fast, no DOM parsing).
- */
-function preStripHtml(html: string): string {
-  let stripped = html;
-  for (const re of STRIP_PATTERNS) {
-    stripped = stripped.replace(re, "");
-  }
-  return stripped;
-}
-
-/**
- * Fetches HTML from a URL and extracts metadata.
- * Metadata is extracted with regex (no cheerio).
- * Body content is pre-stripped and truncated before cheerio.load().
+ * Fetches HTML from a URL and extracts metadata
  */
 export async function scrape(url: string): Promise<ScrapedData> {
   const controller = new AbortController();
@@ -121,22 +56,22 @@ export async function scrape(url: string): Promise<ScrapedData> {
 
     const rawHtml = await response.text();
 
-    // 1. Extract metadata from <head> with regex — zero cheerio cost
-    const { title, description, metadata } = extractMetadataFromHead(
-      rawHtml,
-      url,
-    );
-
-    // 2. Strip heavy tags before cheerio sees the HTML
-    let cleanedForParse = preStripHtml(rawHtml);
-
-    // 3. Truncate to keep cheerio.load() fast
-    if (cleanedForParse.length > MAX_HTML_BYTES) {
-      cleanedForParse = cleanedForParse.substring(0, MAX_HTML_BYTES);
+    // Strip heavy non-content tags before parsing
+    let strippedHtml = rawHtml;
+    for (const re of STRIP_PATTERNS) {
+      strippedHtml = strippedHtml.replace(re, "");
     }
 
-    // 4. Lightweight cheerio parse on pre-cleaned HTML
-    const $ = cheerio.load(cleanedForParse);
+    // Truncate to keep cheerio.load() fast
+    if (strippedHtml.length > MAX_HTML_BYTES) {
+      strippedHtml = strippedHtml.substring(0, MAX_HTML_BYTES);
+    }
+
+    const $ = cheerio.load(strippedHtml);
+
+    const title = extractTitle($);
+    const description = extractDescription($);
+    const metadata = extractMetadata($, url);
 
     return {
       title,
@@ -154,6 +89,50 @@ export async function scrape(url: string): Promise<ScrapedData> {
 
     throw error;
   }
+}
+
+function extractTitle($: cheerio.CheerioAPI): string {
+  return (
+    $('meta[property="og:title"]').attr("content") ||
+    $('meta[name="twitter:title"]').attr("content") ||
+    $("title").first().text().trim() ||
+    ""
+  );
+}
+
+function extractDescription($: cheerio.CheerioAPI): string {
+  return (
+    $('meta[name="description"]').attr("content") ||
+    $('meta[property="og:description"]').attr("content") ||
+    ""
+  );
+}
+
+function extractMetadata($: cheerio.CheerioAPI, baseUrl: string): PageMetadata {
+  const metadata: PageMetadata = {};
+
+  metadata.title = extractTitle($);
+  metadata.description = extractDescription($);
+  metadata.language = $("html").attr("lang") || undefined;
+  metadata.canonical = resolveUrl(
+    $('link[rel="canonical"]').attr("href"),
+    baseUrl,
+  );
+  metadata.author = $('meta[name="author"]').attr("content") || undefined;
+
+  const keywords = $('meta[name="keywords"]').attr("content");
+  if (keywords) {
+    metadata.keywords = keywords
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean);
+  }
+
+  metadata.ogType = $('meta[property="og:type"]').attr("content") || undefined;
+  metadata.ogSiteName =
+    $('meta[property="og:site_name"]').attr("content") || undefined;
+
+  return metadata;
 }
 
 function resolveUrl(
