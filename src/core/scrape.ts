@@ -13,7 +13,7 @@ const BROWSER_HEADERS = {
 };
 
 const FETCH_TIMEOUT = 30000;
-const MAX_HTML_BYTES = 1512_000; // 512KB after stripping
+const MAX_HTML_BYTES = 256_000; // 256KB after stripping
 
 // Pre-compiled regex for stripping heavy non-content tags
 const STRIP_PATTERNS = [

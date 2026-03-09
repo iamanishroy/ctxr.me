@@ -43,10 +43,12 @@ GET /https://example.com
          │
          ▼
 ┌─────────────────────────────────────────┐
-│  1. Fetch                               │
+│  1. Fetch + Metadata                   │
 │  scrape.ts → fetch HTML with browser    │
-│  headers, extract title, description,   │
-│  OG/Twitter metadata via cheerio        │
+│  headers. Extract metadata from <head>  │
+│  via regex (no DOM parsing). Pre-strip  │
+│  <script>/<style>/<svg>/<noscript> and  │
+│  comments before cheerio.load().        │
 │                                         │
 │         ▼                               │
 │  2. Extract Content                     │
@@ -54,6 +56,7 @@ GET /https://example.com
 │  the main content, strips nav/ads/      │
 │  sidebars. Falls back to:               │
 │    a) RSC extraction for Next.js pages  │
+│       (regex on raw HTML string)        │
 │    b) Manual content selectors          │
 │       (main, article, #__next, etc.)    │
 │                                         │
@@ -93,7 +96,7 @@ ctxr/
 │   ├── rate-limit.ts        # IP-based rate limiting (D1)
 │   └── core/
 │       ├── routes.ts        # GET /* handler + D1 caching
-│       ├── scrape.ts        # Fetch HTML + extract metadata
+│       ├── scrape.ts        # Fetch + regex metadata + pre-strip HTML
 │       ├── html-cleaner.ts  # Readability + RSC + manual fallback
 │       ├── rsc-extractor.ts # Next.js RSC flight data parser
 │       ├── markdown.ts      # HTML → Markdown pipeline
