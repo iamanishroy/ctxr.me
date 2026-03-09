@@ -1,7 +1,62 @@
 /**
  * Post-processing functions that clean up raw markdown output.
  * Each function handles one specific concern.
+ * All regex patterns are pre-compiled at module level for CPU efficiency.
  */
+
+// --- Pre-compiled patterns for removeNavigationAidLinks ---
+const NAV_PHRASES = [
+  "skip to content",
+  "return to top",
+  "back to top",
+  "scroll to top",
+  "go to top",
+  "top",
+  "previous page",
+  "next page",
+  "jump to",
+  "back to home",
+  "home",
+];
+const COPY_PHRASES = [
+  "copy page",
+  "copy page content",
+  "copy page content to clipboard",
+  "copy to clipboard",
+  "share this page",
+  "share on",
+  "print this page",
+  "download pdf",
+  "report an issue",
+  "improve this page",
+  "edit this page",
+];
+const buildPhraseRegex = (phrases: string[]) =>
+  new RegExp(
+    phrases
+      .map(
+        (p) =>
+          `(?:^|[\\s\\*\\_\\#\\-]+)${p.replace(/ /g, "[\\s\\*\\_\\#\\-]*")}(?:$|[\\s\\*\\_\\#\\-]+)`,
+      )
+      .join("|"),
+    "gim",
+  );
+const NAV_RE = buildPhraseRegex(NAV_PHRASES);
+const COPY_RE = buildPhraseRegex(COPY_PHRASES);
+const SKIP_LINK_RE = /\[(Skip to Content)\]\(#[^)]*\)/gi;
+const BACK_TOP_RE =
+  /\[(Return to top|Back to top|Scroll to top|Go to top|Top)\]\(#[^)]*\)/gi;
+const BLANK_LINE_RE = /^\s*[\r\n]/gm;
+
+// --- Pre-compiled patterns for fixCodeBlockFormatting ---
+const LANG_PATTERN =
+  "ts|tsx|js|jsx|typescript|javascript|python|py|java|c|cpp|csharp|cs|go|rust|ruby|php|html|css|scss|sass|less|json|xml|yaml|yml|bash|sh|shell|zsh|sql|swift|kotlin|dart|r|scala|perl|powershell|ps1|graphql|markdown|md|toml|ini|dockerfile|vue|svelte|astro|hcl|terraform|lua|elixir|elm|haskell|ocaml|fsharp|clojure|groovy|console|diff|text";
+const FILE_PATH_PATTERN = `(?:(?:[\\w\\-./]+\\.)?)(${LANG_PATTERN})(?:\\b|$)`;
+const CODE_RE1 = new RegExp(`^(${LANG_PATTERN})\\n\`\`\`\\n`, "gm");
+const CODE_RE2 = new RegExp(`^(${LANG_PATTERN})\\n\\n\`\`\`\\n`, "gm");
+const CODE_RE3 = new RegExp(`^${FILE_PATH_PATTERN}\\n\`\`\`\\n`, "gm");
+const CODE_RE4 = new RegExp(`^${FILE_PATH_PATTERN}\\n\\n\`\`\`\\n`, "gm");
+const CODE_RE5 = new RegExp(`^${FILE_PATH_PATTERN}\\s*\`\`\`\\n`, "gm");
 
 /** Escape newlines inside markdown link text so multi-line links render correctly. */
 export function processMultiLineLinks(md: string): string {
@@ -22,57 +77,12 @@ export function processMultiLineLinks(md: string): string {
 
 /** Remove navigation aid links like "Skip to Content", "Back to top". */
 export function removeNavigationAidLinks(md: string): string {
-  let cleaned = md
-    .replace(/\[(Skip to Content)\]\(#[^)]*\)/gi, "")
-    .replace(
-      /\[(Return to top|Back to top|Scroll to top|Go to top|Top)\]\(#[^)]*\)/gi,
-      "",
-    );
-
-  const navPhrases = [
-    "skip to content",
-    "return to top",
-    "back to top",
-    "scroll to top",
-    "go to top",
-    "top",
-    "previous page",
-    "next page",
-    "jump to",
-    "back to home",
-    "home",
-  ];
-
-  const copyPhrases = [
-    "copy page",
-    "copy page content",
-    "copy page content to clipboard",
-    "copy to clipboard",
-    "share this page",
-    "share on",
-    "print this page",
-    "download pdf",
-    "report an issue",
-    "improve this page",
-    "edit this page",
-  ];
-
-  const toRegex = (phrases: string[]) =>
-    new RegExp(
-      phrases
-        .map(
-          (p) =>
-            `(?:^|[\\s\\*\\_\\#\\-]+)${p.replace(/ /g, "[\\s\\*\\_\\#\\-]*")}(?:$|[\\s\\*\\_\\#\\-]+)`,
-        )
-        .join("|"),
-      "gim",
-    );
-
-  cleaned = cleaned.replace(toRegex(navPhrases), "\n");
-  cleaned = cleaned.replace(toRegex(copyPhrases), "\n");
-  cleaned = cleaned.replace(/^\s*[\r\n]/gm, "");
-
-  return cleaned;
+  return md
+    .replace(SKIP_LINK_RE, "")
+    .replace(BACK_TOP_RE, "")
+    .replace(NAV_RE, "\n")
+    .replace(COPY_RE, "\n")
+    .replace(BLANK_LINE_RE, "");
 }
 
 /** Remove empty links: `[](url)` and `[  ](url)` patterns. */
@@ -174,37 +184,12 @@ export function collapseRedundantHeadings(md: string): string {
 
 /** Merge stray language identifiers/file paths into adjacent code fences. */
 export function fixCodeBlockFormatting(md: string): string {
-  const langPattern =
-    "ts|tsx|js|jsx|typescript|javascript|python|py|java|c|cpp|csharp|cs|go|rust|ruby|php|html|css|scss|sass|less|json|xml|yaml|yml|bash|sh|shell|zsh|sql|swift|kotlin|dart|r|scala|perl|powershell|ps1|graphql|markdown|md|toml|ini|dockerfile|vue|svelte|astro|hcl|terraform|lua|elixir|elm|haskell|ocaml|fsharp|clojure|groovy|console|diff|text";
-
-  const filePathPattern = `(?:(?:[\\w\\-./]+\\.)?)(${langPattern})(?:\\b|$)`;
-
   let result = md;
-
-  // Standalone language id before code block
-  result = result.replace(
-    new RegExp(`^(${langPattern})\\n\`\`\`\\n`, "gm"),
-    "```$1\n",
-  );
-  result = result.replace(
-    new RegExp(`^(${langPattern})\\n\\n\`\`\`\\n`, "gm"),
-    "```$1\n",
-  );
-
-  // File path before code block
-  result = result.replace(
-    new RegExp(`^${filePathPattern}\\n\`\`\`\\n`, "gm"),
-    (_match, lang) => `\`\`\`${lang}\n`,
-  );
-  result = result.replace(
-    new RegExp(`^${filePathPattern}\\n\\n\`\`\`\\n`, "gm"),
-    (_match, lang) => `\`\`\`${lang}\n`,
-  );
-  result = result.replace(
-    new RegExp(`^${filePathPattern}\\s*\`\`\`\\n`, "gm"),
-    (_match, lang) => `\`\`\`${lang}\n`,
-  );
-
+  result = result.replace(CODE_RE1, "```$1\n");
+  result = result.replace(CODE_RE2, "```$1\n");
+  result = result.replace(CODE_RE3, (_m, lang) => `\`\`\`${lang}\n`);
+  result = result.replace(CODE_RE4, (_m, lang) => `\`\`\`${lang}\n`);
+  result = result.replace(CODE_RE5, (_m, lang) => `\`\`\`${lang}\n`);
   return result;
 }
 
