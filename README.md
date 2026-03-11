@@ -86,7 +86,8 @@ ctxr/
 │   │   ├── limits.json          # All numeric limits
 │   │   ├── exclude-selectors.json # HTMLRewriter selectors (by category)
 │   │   ├── footer-sections.json   # Section IDs to strip
-│   │   └── content-containers.json # Container tags to extract
+│   │   ├── content-containers.json # Container tags to extract
+│   │   └── cleaner-patterns.json  # Markdown cleaner phrases + thresholds
 │   └── core/
 │       ├── pipeline.ts      # Extraction orchestrator (entry point)
 │       ├── fetcher.ts       # HTTP fetch + metadata + JSON-LD
@@ -96,7 +97,7 @@ ctxr/
 │       ├── rsc-extractor.ts # Next.js RSC flight data parser
 │       ├── formatter.ts     # Response formatting + word truncation
 │       ├── markdown.ts      # HTML → Markdown pipeline
-│       ├── md-cleaners.ts   # 8 post-processing cleaners
+│       ├── md-cleaners.ts   # 11 post-processing cleaners
 │       ├── md-translators.ts # Custom code block translators
 │       ├── normalize-url.ts # URL normalization + deduplication
 │       ├── routes.ts        # Thin HTTP handler (cache + pipeline)

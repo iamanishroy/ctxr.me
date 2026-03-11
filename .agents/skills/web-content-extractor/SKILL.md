@@ -29,6 +29,7 @@ All numeric limits and filter lists are in JSON config files (`src/config/`), no
 | `exclude-selectors.json` | HTMLRewriter selectors organized by category |
 | `footer-sections.json` | Section heading IDs to strip (references, bibliography, etc.) |
 | `content-containers.json` | Container tags to extract (`article`, `main`) |
+| `cleaner-patterns.json` | Markdown cleaner phrases + thresholds |
 
 ## Stage 1: Fetch + Metadata (`fetcher.ts`)
 
@@ -143,7 +144,7 @@ See the `ctxr` project at `/Users/anish/Desktop/Developer/ctxr/src/`:
 Unit tests with [Vitest](https://vitest.dev/), using HTML fixtures:
 
 ```bash
-yarn test    # 29 tests, ~150ms
+yarn test    # 38 tests, ~180ms
 ```
 
 | Test file | Coverage |
