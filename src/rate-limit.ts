@@ -1,7 +1,10 @@
-import { createMiddleware } from "hono/factory";
+/**
+ * Rate limiter middleware — IP-based request throttling.
+ * Reads limits from config/limits.json.
+ */
 
-const MAX_REQUESTS = 10;
-const WINDOW_SECONDS = 60;
+import { createMiddleware } from "hono/factory";
+import limits from "./config/limits.json";
 
 export const rateLimiter = () => {
   return createMiddleware<{ Bindings: { DB: D1Database } }>(async (c, next) => {
@@ -17,7 +20,7 @@ export const rateLimiter = () => {
       "unknown";
 
     const now = Math.floor(Date.now() / 1000);
-    const windowStart = now - WINDOW_SECONDS;
+    const windowStart = now - limits.rateLimitWindowSeconds;
 
     // Clean up expired entries and count current window in a batch
     const [, countResult] = await c.env.DB.batch([
@@ -31,11 +34,11 @@ export const rateLimiter = () => {
 
     const count = (countResult.results[0] as { count: number }).count;
 
-    if (count >= MAX_REQUESTS) {
+    if (count >= limits.rateLimitRequests) {
       return c.json(
-        { error: "Rate limit exceeded", retryAfter: WINDOW_SECONDS },
+        { error: "Rate limit exceeded", retryAfter: limits.rateLimitWindowSeconds },
         429,
-        { "Retry-After": String(WINDOW_SECONDS) },
+        { "Retry-After": String(limits.rateLimitWindowSeconds) },
       );
     }
 

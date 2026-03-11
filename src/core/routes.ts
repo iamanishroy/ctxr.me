@@ -1,10 +1,13 @@
+/**
+ * HTTP routes — thin shell that delegates to the pipeline.
+ * Only handles: URL parsing, caching, and HTTP responses.
+ */
+
 import { Hono } from "hono";
-import { scrape, MAX_RESPONSE_WORDS } from "./scrape";
-import { cleanWithRewriter } from "./html-rewriter";
-import { extractRscContent } from "./rsc-extractor";
-import { htmlToMarkdown } from "./markdown";
+import limits from "../config/limits.json";
+import { extractContent } from "./pipeline";
+import { formatResponse } from "./formatter";
 import { normalizeUrl } from "./normalize-url";
-import type { PageMetadata } from "./types";
 
 type Bindings = {
   DB: D1Database;
@@ -12,73 +15,9 @@ type Bindings = {
 
 const read = new Hono<{ Bindings: Bindings }>();
 
-const CACHE_TTL_SECONDS = 60 * 60; // 1 hour
-
-/**
- * Build a metadata header block for LLM consumption
- */
-function buildMetadataHeader(
-  targetUrl: string,
-  title: string,
-  description: string,
-  metadata?: PageMetadata,
-): string {
-  const lines: string[] = [];
-
-  if (title) {
-    lines.push(`Title: ${title}`);
-  }
-
-  if (description) {
-    lines.push(`Description: ${description}`);
-  }
-
-  lines.push(`URL Source: ${targetUrl}`);
-
-  if (metadata?.language) {
-    lines.push(`Language: ${metadata.language}`);
-  }
-
-  if (metadata?.author) {
-    lines.push(`Author: ${metadata.author}`);
-  }
-
-  if (metadata?.ogSiteName) {
-    lines.push(`Site Name: ${metadata.ogSiteName}`);
-  }
-
-  if (metadata?.canonical && metadata.canonical !== targetUrl) {
-    lines.push(`Canonical URL: ${metadata.canonical}`);
-  }
-
-  if (metadata?.ogType) {
-    lines.push(`Content Type: ${metadata.ogType}`);
-  }
-
-  if (metadata?.keywords?.length) {
-    lines.push(`Keywords: ${metadata.keywords.join(", ")}`);
-  }
-
-  return lines.join("\n");
-}
-
-/** Truncate markdown to MAX_RESPONSE_WORDS, breaking at a paragraph boundary. */
-function truncateMarkdown(md: string): string {
-  const words = md.split(/\s+/);
-  if (words.length <= MAX_RESPONSE_WORDS) return md;
-
-  const truncated = words.slice(0, MAX_RESPONSE_WORDS).join(" ");
-  // Try to break at a paragraph boundary (double newline)
-  const lastParagraph = truncated.lastIndexOf("\n\n");
-  const cutpoint = lastParagraph > truncated.length * 0.8 ? lastParagraph : truncated.length;
-  return truncated.substring(0, cutpoint) + "\n\n---\n*Content truncated at " + MAX_RESPONSE_WORDS.toLocaleString() + " words.*";
-}
-
-const MIN_WORD_COUNT = 50;
-
 /**
  * GET /<url>
- * Returns markdown content with metadata header
+ * Returns LLM-friendly markdown with metadata header.
  */
 read.get("/*", async (c) => {
   const rawUrl = c.req.path.slice(1);
@@ -95,7 +34,7 @@ read.get("/*", async (c) => {
     const cached = await c.env.DB.prepare(
       "SELECT response, created_at FROM cache WHERE url = ? AND created_at > ?",
     )
-      .bind(targetUrl, now - CACHE_TTL_SECONDS)
+      .bind(targetUrl, now - limits.cacheTtlSeconds)
       .first<{ response: string; created_at: number }>();
 
     if (cached) {
@@ -105,40 +44,16 @@ read.get("/*", async (c) => {
       });
     }
 
-    // Cache miss — scrape + clean with HTMLRewriter (streaming, no DOM)
-    const scraped = await scrape(targetUrl);
+    // Cache miss — run the extraction pipeline
+    const result = await extractContent(targetUrl);
 
-    // 1. Clean HTML with HTMLRewriter (streaming, near-zero CPU)
-    const cleanedHtml = await cleanWithRewriter(scraped.rawHtml, targetUrl);
-
-    // 2. Convert to markdown
-    let markdown = htmlToMarkdown(cleanedHtml);
-    const wordCount = markdown.split(/\s+/).filter(Boolean).length;
-
-    // 3. If HTMLRewriter result is too sparse, try RSC extraction (Next.js)
-    if (wordCount < MIN_WORD_COUNT) {
-      const rscContent = extractRscContent(scraped.rawHtml);
-      if (rscContent) {
-        markdown = htmlToMarkdown(rscContent);
-      }
-    }
-
-    // 4. Enforce word limit to prevent abuse and cap CPU
-    markdown = truncateMarkdown(markdown);
-
-    const title = scraped.title || "";
-    const description = scraped.description || "";
-
-    const header = buildMetadataHeader(
+    const fullResponse = formatResponse(
       targetUrl,
-      title,
-      description,
-      scraped.metadata,
+      result.title,
+      result.description,
+      result.markdown,
+      result.metadata,
     );
-
-    const body = markdown || "No content could be extracted from this URL.";
-    const finalWordCount = body.split(/\s+/).filter(Boolean).length;
-    const fullResponse = `${header}\nWord Count: ${finalWordCount}\n\n---\n\n${body}`;
 
     // Store in D1 cache (upsert)
     await c.env.DB.prepare(

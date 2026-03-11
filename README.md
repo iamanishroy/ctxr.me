@@ -43,32 +43,27 @@ GET /https://example.com
          │
          ▼
 ┌─────────────────────────────────────────┐
-│  1. Fetch + Metadata                   │
-│  scrape.ts → fetch HTML with browser    │
-│  headers. Extract metadata from <head>  │
-│  via regex (no DOM parsing).            │
-│  Extract <article>/<main> container.    │
-│  Truncate to 256KB hard limit.          │
+│  pipeline.ts — orchestrator             │
 │                                         │
-│         ▼                               │
-│  2. Clean Content (HTMLRewriter)        │
-│  html-rewriter.ts → streaming HTML      │
-│  parser strips nav/header/footer/ads/   │
-│  sidebars/modals by tag, class, ID,     │
-│  and ARIA role. Zero DOM allocation.    │
-│  Falls back to RSC for Next.js pages    │
-│  if content is sparse.                  │
+│  1. fetcher.ts                          │
+│     Fetch HTML, extract metadata from   │
+│     <head> via regex (no DOM parsing)   │
 │                                         │
-│         ▼                               │
-│  3. Convert to Markdown                 │
-│  markdown.ts → node-html-markdown       │
-│  converts clean HTML to markdown        │
+│  2. extractor.ts                        │
+│     Extract <article>/<main> container  │
+│     Strip footer sections by heading ID │
+│     Truncate to 256KB safety net        │
 │                                         │
-│         ▼                               │
-│  4. Post-process + Enforce Limits       │
-│  md-cleaners.ts → 8-stage pipeline      │
-│  Cap output at 10,000 words to          │
-│  prevent abuse and cap CPU time.        │
+│  3. html-rewriter.ts                    │
+│     HTMLRewriter streaming cleaner      │
+│     Strips 120+ non-content selectors   │
+│                                         │
+│  4. markdown.ts + md-cleaners.ts        │
+│     HTML → Markdown, 8-stage cleanup    │
+│     RSC fallback for Next.js pages      │
+│                                         │
+│  5. formatter.ts                        │
+│     Cap at 10,000 words, build header   │
 │                                         │
 │         ▼                               │
 │  Return clean markdown                  │
@@ -87,16 +82,24 @@ ctxr/
 ├── src/
 │   ├── index.ts             # Hono app entry point
 │   ├── rate-limit.ts        # IP-based rate limiting (D1)
+│   ├── config/
+│   │   ├── limits.json          # All numeric limits
+│   │   ├── exclude-selectors.json # HTMLRewriter selectors (by category)
+│   │   ├── footer-sections.json   # Section IDs to strip
+│   │   └── content-containers.json # Container tags to extract
 │   └── core/
-│       ├── routes.ts        # GET /* handler + D1 caching
-│       ├── scrape.ts        # Fetch + metadata + content extraction + limits
+│       ├── pipeline.ts      # Extraction orchestrator (entry point)
+│       ├── fetcher.ts       # HTTP fetch + regex metadata
+│       ├── extractor.ts     # Content extraction + footer stripping
 │       ├── html-rewriter.ts # HTMLRewriter streaming cleaner
-│       ├── selectors.ts     # Non-content CSS selectors (120+)
+│       ├── selectors.ts     # Loads selectors from JSON config
 │       ├── rsc-extractor.ts # Next.js RSC flight data parser
+│       ├── formatter.ts     # Response formatting + word truncation
 │       ├── markdown.ts      # HTML → Markdown pipeline
 │       ├── md-cleaners.ts   # 8 post-processing cleaners
 │       ├── md-translators.ts # Custom code block translators
 │       ├── normalize-url.ts # URL normalization + deduplication
+│       ├── routes.ts        # Thin HTTP handler (cache + pipeline)
 │       └── types.ts         # TypeScript interfaces
 ├── schema.sql               # D1 database schema
 ├── wrangler.jsonc            # Cloudflare Workers config

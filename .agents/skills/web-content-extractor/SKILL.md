@@ -1,158 +1,135 @@
 ---
 name: web-content-extractor
 description: Extract clean, LLM-friendly markdown from any web page. Handles standard HTML, React Server Components (RSC/Next.js), and client-side rendered pages. Use when building scrapers, content pipelines, or reader-mode features.
-version: 2.2.0
+version: 3.0.0
 ---
 
 # Web Content Extraction
 
-A multi-stage pipeline for converting web pages to clean markdown. Designed for Cloudflare Workers using the streaming HTMLRewriter API for near-zero CPU cost.
+A modular pipeline for converting web pages to clean markdown. Designed for Cloudflare Workers using the streaming HTMLRewriter API for near-zero CPU cost.
 
 ## Architecture
 
 ```
-Raw HTML → Metadata from <head>
-    → Extract <article>/<main> container
-    → Truncate at 256KB
-    → HTMLRewriter (streaming clean)
-    → Markdown → Post-process → Cap at 10,000 words
-                                    ↓ (sparse result?)
-                               RSC Extractor (Next.js)
+pipeline.ts — single orchestrator
+  1. fetcher.ts    → fetch + metadata from <head>
+  2. extractor.ts  → extract <article>/<main>, strip footers, truncate
+  3. html-rewriter → streaming HTMLRewriter, 120+ selectors
+  4. markdown.ts   → HTML → Markdown, 8-stage cleanup, RSC fallback
+  5. formatter.ts  → word cap, metadata header, response assembly
 ```
 
-## Stage 1: Fetch + Metadata
+All numeric limits and filter lists are in JSON config files (`src/config/`), not hardcoded.
 
-Fetch HTML with browser-like headers. Extract metadata from `<head>` section only (not full HTML) using fast regex — **no DOM parsing**.
+## Config Files
+
+| File | Purpose |
+|---|---|
+| `limits.json` | All numeric limits (max HTML bytes, max words, fetch timeout, cache TTL, rate limit) |
+| `exclude-selectors.json` | HTMLRewriter selectors organized by category |
+| `footer-sections.json` | Section heading IDs to strip (references, bibliography, etc.) |
+| `content-containers.json` | Container tags to extract (`article`, `main`) |
+
+## Stage 1: Fetch + Metadata (`fetcher.ts`)
+
+Fetch HTML with browser-like headers. Extract metadata from `<head>` section only using fast regex — **no DOM parsing**.
 
 ```typescript
-// Extract <head> for metadata — much smaller search surface
-const headEnd = rawHtml.indexOf("</head>");
-const headHtml = headEnd > 0 ? rawHtml.substring(0, headEnd) : rawHtml.substring(0, 10_000);
+export async function fetchPage(url: string): Promise<FetchResult> {
+  // Fetch with timeout from limits.json
+  const html = await response.text();
 
-const title = extractMeta(headHtml, "og:title") ||
-  headHtml.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "";
-```
+  // Extract metadata from <head> only — much smaller search surface
+  const headEnd = html.indexOf("</head>");
+  const headHtml = headEnd > 0 ? html.substring(0, headEnd) : html.substring(0, 10_000);
 
-After metadata extraction, extract the content container and truncate:
-
-```typescript
-const CONTENT_TAGS = ["article", "main"];
-
-// Phase 1: Extract content container from FULL HTML (before truncation)
-let rawHtml = extractContentContainer(fullHtml) || fullHtml;
-
-// Phase 2: Truncate to stay within CPU limits
-const MAX_HTML_BYTES = 256_000; // 256KB
-if (rawHtml.length > MAX_HTML_BYTES) {
-  const cutPoint = rawHtml.lastIndexOf(">", MAX_HTML_BYTES);
-  rawHtml = rawHtml.substring(0, cutPoint > 0 ? cutPoint + 1 : MAX_HTML_BYTES);
+  const title = extractMeta(headHtml, "og:title") || ...;
+  return { html, title, description, metadata };
 }
 ```
 
-> **Important:** Content container extraction runs on the FULL HTML before truncation. This narrows a 947KB Wikipedia page to its ~300KB `<main>` block, then truncates to 256KB. Much less for downstream processing.
+## Stage 2: Content Extraction (`extractor.ts`)
 
-## Stage 2: Content Cleaning (HTMLRewriter)
-
-Use Cloudflare's built-in **HTMLRewriter** — a streaming parser that processes HTML tag-by-tag without building a DOM tree.
-
-### MainContentHandler
-
-Removes non-content elements by matching tag name, class, ID, and ARIA attributes against 120+ pre-parsed selectors:
+Three-phase content narrowing, all using string scanning (no DOM):
 
 ```typescript
-// selectors.ts — pre-parsed at module init
-const EXCLUDE_PATTERNS = EXCLUDE_SELECTORS.map((selector) => {
-  if (selector.startsWith(".")) return { className: selector.slice(1) };
-  if (selector.startsWith("#")) return { id: selector.slice(1) };
-  if (selector.startsWith("[")) return { attr: { name, value } };
-  return { tag: selector };
-});
+export function extractMainContent(html: string): string {
+  // Phase 1: Extract <article> or <main> container
+  let content = extractContainer(html) || html;
 
-// html-rewriter.ts
-class MainContentHandler implements HTMLRewriterElementContentHandlers {
-  element(element: Element) {
-    // Check tag, class, id, attrs against pre-parsed patterns
-    if (shouldRemove) element.remove();
-  }
+  // Phase 2: Strip footer sections (References, External links, etc.)
+  content = stripFooterSections(content);
+
+  // Phase 3: Truncate to safety-net byte limit
+  if (content.length > limits.maxHtmlBytes) { ... }
+
+  return content;
 }
 ```
 
-### LinkNormalizeHandler
+**Container extraction** uses indexOf-based nesting-aware scanning. **Footer stripping** finds the earliest `id="references"` (etc.) heading and cuts everything after it.
 
-Converts relative URLs to absolute for `<a>`, `<img>`, and `<link>` tags.
+> **Example:** Wikipedia SRK page: 943KB → extract `<main>` (889KB) → strip footer (237KB) → only article prose remains.
+
+## Stage 3: HTML Cleaning (`html-rewriter.ts`)
+
+Cloudflare's built-in **HTMLRewriter** — streaming parser, near-zero CPU. Selectors loaded from `exclude-selectors.json`.
 
 ```typescript
-export async function cleanWithRewriter(rawHtml: string, baseUrl: string): Promise<string> {
-  const rewriter = new HTMLRewriter()
+export async function cleanWithRewriter(html: string, baseUrl: string): Promise<string> {
+  return await new HTMLRewriter()
     .on("*", new MainContentHandler())
     .on("a[href]", new LinkNormalizeHandler(baseUrl))
-    .on("img[src]", new LinkNormalizeHandler(baseUrl));
-
-  return await rewriter.transform(new Response(rawHtml)).text();
+    .on("img[src]", new LinkNormalizeHandler(baseUrl))
+    .transform(new Response(html)).text();
 }
 ```
 
-> **Key advantage:** Content container extraction happens upstream in `scrape.ts`, so HTMLRewriter only processes the extracted `<article>`/`<main>` content (not the full page).
+## Stage 4: Markdown Conversion (`markdown.ts`)
 
-## Stage 2b: RSC Extraction (Next.js fallback)
+`node-html-markdown` with 8 post-processing cleaners applied in order.
 
-If HTMLRewriter's result has < 50 words, fall back to RSC extraction for Next.js pages. Content is embedded in `<script>self.__next_f.push()</script>` tags as flight data.
+## Stage 5: RSC Fallback (`rsc-extractor.ts`)
 
-**Detection:** `rawHtml.includes("__next_f")`
+If markdown has < `minWordCount` words, try extracting Next.js RSC flight data from `self.__next_f.push()` script tags.
 
-**Extraction pattern:**
-1. Find all `self.__next_f.push([1,"..."])` payloads via regex on rawHtml
-2. Unescape the flight data (nested escaping: `\\n`, `\\"`, etc.)
-3. Extract headings: `"as":"h1"..."children":"Title Text"`
-4. Extract body: `"children":"Long text content..."` (≥40 chars)
-5. **Sort by match index** to preserve document order (critical)
+## Stage 6: Formatting (`formatter.ts`)
 
-**Filter out false positives** — skip children strings containing `{`, `function`, `/_next/`, or starting with `$`.
+Truncate markdown at `maxResponseWords` (paragraph boundary), build metadata header, assemble response.
 
-## Stage 3: HTML → Markdown
+## Limits & Hard Caps
 
-Use `node-html-markdown` with custom code block translators that handle language detection via `class="language-*"` attributes.
+All values from `limits.json`:
 
-## Stage 4: Post-processing Pipeline
-
-8 cleaners, applied in order:
-
-| Cleaner | Purpose |
-|---|---|
-| `processMultiLineLinks` | Escape newlines inside `[link text]` |
-| `removeNavigationAidLinks` | Strip "Skip to content", "Back to top" links |
-| `removeEmptyLinks` | Remove `[](url)` patterns |
-| `cleanBrokenTables` | Fix pipe-only rows, extract layout table content |
-| `truncateLongAltText` | Cap image alt text at 120 chars |
-| `collapseRedundantHeadings` | Remove consecutive duplicate headings |
-| `fixCodeBlockFormatting` | Merge stray language IDs into code fences |
-| `removeExcessiveNewlines` | Collapse 3+ newlines to 2 |
-
-> **Performance tip:** Pre-compile all regex patterns at module level, not inside functions.
-
-## CPU Optimization & Hard Limits
-
-| Limit | Value | Purpose |
+| Limit | Default | Purpose |
 |---|---|---|
-| HTML truncation | 256KB | Caps HTML fed to HTMLRewriter + markdown converter |
-| Metadata from `<head>` only | ~first few KB | Avoids regex on full HTML |
-| Markdown word cap | 10,000 words | Prevents abuse; truncates at paragraph boundary |
-| Rate limit | 10 req/min/IP | Prevents scraping abuse |
+| `maxHtmlBytes` | 256KB | Safety-net truncation after extraction |
+| `maxResponseWords` | 10,000 | Word cap for final markdown |
+| `minWordCount` | 50 | Threshold for RSC fallback |
+| `fetchTimeoutMs` | 30,000 | HTTP fetch timeout |
+| `cacheTtlSeconds` | 3,600 | D1 cache TTL |
+| `rateLimitRequests` | 10 | Requests per window |
+| `rateLimitWindowSeconds` | 60 | Rate limit window |
 
-- **HTMLRewriter** is the single biggest optimization — streaming vs DOM parsing
-- **Content container extraction** — scans for `<article>` / `<main>` after HTMLRewriter cleaning
-- **Pre-compiled regex** in post-processing cleaners
-- **No cheerio, no Readability** in the critical path
+## CPU Optimization
+
+- **HTMLRewriter** — streaming vs DOM parsing
+- **Footer stripping** — removes 69% of Wikipedia's `<main>` block before processing
+- **Content container extraction** — narrows HTML to just `<article>`/`<main>`
+- **Head-only metadata** — avoids regex on full HTML
+- **Pre-compiled regex** in cleaners
+- **No cheerio, no Readability**
 
 ## Reference Implementation
 
-See the `ctxr` project at `/Users/anish/Desktop/Developer/ctxr/src/core/`:
+See the `ctxr` project at `/Users/anish/Desktop/Developer/ctxr/src/`:
 
-- `scrape.ts` — Fetch + regex metadata
-- `html-rewriter.ts` — HTMLRewriter streaming content cleaner
-- `selectors.ts` — 120+ non-content CSS selectors
-- `rsc-extractor.ts` — Next.js RSC flight data parser
-- `markdown.ts` — HTML → Markdown pipeline
-- `md-cleaners.ts` — 8 post-processing cleaners
-- `md-translators.ts` — Custom code block translators
-- `normalize-url.ts` — URL normalization
+- `config/` — JSON config files (limits, selectors, footer sections, containers)
+- `core/pipeline.ts` — Orchestrator
+- `core/fetcher.ts` — HTTP fetch + metadata
+- `core/extractor.ts` — Content extraction + footer stripping
+- `core/html-rewriter.ts` — HTMLRewriter streaming cleaner
+- `core/selectors.ts` — Loads selectors from JSON
+- `core/rsc-extractor.ts` — Next.js RSC parser
+- `core/formatter.ts` — Response formatting
+- `core/markdown.ts` — HTML → Markdown + cleaners

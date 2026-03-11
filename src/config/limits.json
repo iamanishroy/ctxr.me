@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "All numeric limits for the extraction pipeline and HTTP layer.",
+  "maxHtmlBytes": 256000,
+  "maxResponseWords": 10000,
+  "minWordCount": 50,
+  "fetchTimeoutMs": 30000,
+  "cacheTtlSeconds": 3600,
+  "rateLimitRequests": 10,
+  "rateLimitWindowSeconds": 60
+}
