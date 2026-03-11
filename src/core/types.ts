@@ -1,5 +1,4 @@
 // Request/Response types for read feature
-import type { CheerioAPI } from "cheerio";
 
 export interface ReadOptions {
   url: string;
@@ -36,16 +35,10 @@ export interface ScrapedData {
   title: string;
   description: string;
   rawHtml: string;
-  $: CheerioAPI;
-  cleanedHtml?: string;
   metadata?: PageMetadata;
 }
 
-export interface CleanedContent {
-  cleanedHtml: string;
-  title?: string;
-  excerpt?: string;
-}
+
 
 export interface ReadSuccessResponse {
   success: true;

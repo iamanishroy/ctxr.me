@@ -1,4 +1,3 @@
-import * as cheerio from "cheerio";
 import type { PageMetadata, ScrapedData } from "./types";
 
 const BROWSER_HEADERS = {
@@ -13,20 +12,9 @@ const BROWSER_HEADERS = {
 };
 
 const FETCH_TIMEOUT = 30000;
-const MAX_HTML_BYTES = 256_000; // 256KB after stripping
-
-// Pre-compiled regex for stripping heavy non-content tags before cheerio
-const STRIP_PATTERNS = [
-  /<script[^>]*>[\s\S]*?<\/script>/gi,
-  /<style[^>]*>[\s\S]*?<\/style>/gi,
-  /<svg[^>]*>[\s\S]*?<\/svg>/gi,
-  /<noscript[^>]*>[\s\S]*?<\/noscript>/gi,
-  /<!--[\s\S]*?-->/g,
-  /<link[^>]*>/gi,
-];
 
 /**
- * Fetches HTML from a URL and extracts metadata
+ * Fetches HTML from a URL and extracts metadata via regex (no DOM parsing).
  */
 export async function scrape(url: string): Promise<ScrapedData> {
   const controller = new AbortController();
@@ -56,30 +44,18 @@ export async function scrape(url: string): Promise<ScrapedData> {
 
     const rawHtml = await response.text();
 
-    // Strip heavy non-content tags before parsing
-    let strippedHtml = rawHtml;
-    for (const re of STRIP_PATTERNS) {
-      strippedHtml = strippedHtml.replace(re, "");
-    }
+    // Extract metadata with regex — zero DOM cost
+    const title = extractMeta(rawHtml, "og:title") ||
+      extractMeta(rawHtml, "twitter:title") ||
+      rawHtml.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "";
 
-    // Truncate to keep cheerio.load() fast
-    if (strippedHtml.length > MAX_HTML_BYTES) {
-      strippedHtml = strippedHtml.substring(0, MAX_HTML_BYTES);
-    }
+    const description =
+      extractMeta(rawHtml, "description") ||
+      extractMeta(rawHtml, "og:description") || "";
 
-    const $ = cheerio.load(strippedHtml);
+    const metadata = extractMetadata(rawHtml, url);
 
-    const title = extractTitle($);
-    const description = extractDescription($);
-    const metadata = extractMetadata($, url);
-
-    return {
-      title,
-      description,
-      rawHtml,
-      $,
-      metadata,
-    };
+    return { title, description, rawHtml, metadata };
   } catch (error) {
     clearTimeout(timeoutId);
 
@@ -91,48 +67,42 @@ export async function scrape(url: string): Promise<ScrapedData> {
   }
 }
 
-function extractTitle($: cheerio.CheerioAPI): string {
-  return (
-    $('meta[property="og:title"]').attr("content") ||
-    $('meta[name="twitter:title"]').attr("content") ||
-    $("title").first().text().trim() ||
-    ""
+/** Fast regex extraction of a single meta tag value. */
+function extractMeta(html: string, name: string): string {
+  // Match both name="..." content="..." and content="..." name="..." orderings
+  const re = new RegExp(
+    `<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']*?)["']` +
+    `|<meta[^>]+content=["']([^"']*?)["'][^>]+(?:name|property)=["']${name}["']`,
+    "i",
   );
+  const m = html.match(re);
+  return m?.[1] || m?.[2] || "";
 }
 
-function extractDescription($: cheerio.CheerioAPI): string {
-  return (
-    $('meta[name="description"]').attr("content") ||
-    $('meta[property="og:description"]').attr("content") ||
-    ""
+function extractMetadata(html: string, baseUrl: string): PageMetadata {
+  const langMatch = html.match(/<html[^>]+lang=["']([^"']+)["']/i);
+  const canonicalMatch = html.match(
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*?)["']/i,
   );
-}
 
-function extractMetadata($: cheerio.CheerioAPI, baseUrl: string): PageMetadata {
-  const metadata: PageMetadata = {};
-
-  metadata.title = extractTitle($);
-  metadata.description = extractDescription($);
-  metadata.language = $("html").attr("lang") || undefined;
-  metadata.canonical = resolveUrl(
-    $('link[rel="canonical"]').attr("href"),
-    baseUrl,
-  );
-  metadata.author = $('meta[name="author"]').attr("content") || undefined;
-
-  const keywords = $('meta[name="keywords"]').attr("content");
-  if (keywords) {
-    metadata.keywords = keywords
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
-  }
-
-  metadata.ogType = $('meta[property="og:type"]').attr("content") || undefined;
-  metadata.ogSiteName =
-    $('meta[property="og:site_name"]').attr("content") || undefined;
-
-  return metadata;
+  return {
+    title: extractMeta(html, "og:title") ||
+      html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim(),
+    description: extractMeta(html, "description") || undefined,
+    language: langMatch?.[1] || undefined,
+    canonical: canonicalMatch?.[1]
+      ? resolveUrl(canonicalMatch[1], baseUrl)
+      : undefined,
+    author: extractMeta(html, "author") || undefined,
+    keywords: (() => {
+      const kw = extractMeta(html, "keywords");
+      return kw
+        ? kw.split(",").map((k) => k.trim()).filter(Boolean)
+        : undefined;
+    })(),
+    ogType: extractMeta(html, "og:type") || undefined,
+    ogSiteName: extractMeta(html, "og:site_name") || undefined,
+  };
 }
 
 function resolveUrl(

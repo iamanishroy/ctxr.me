@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { scrape } from "./scrape";
-import { cleanHtml } from "./html-cleaner";
+import { cleanWithRewriter } from "./html-rewriter";
+import { extractRscContent } from "./rsc-extractor";
 import { htmlToMarkdown } from "./markdown";
 import { normalizeUrl } from "./normalize-url";
 import type { PageMetadata } from "./types";
@@ -61,10 +62,11 @@ function buildMetadataHeader(
   return lines.join("\n");
 }
 
+const MIN_WORD_COUNT = 50;
+
 /**
  * GET /<url>
  * Returns markdown content with metadata header
- * e.g. domain.com/https://example.com
  */
 read.get("/*", async (c) => {
   const rawUrl = c.req.path.slice(1);
@@ -91,18 +93,26 @@ read.get("/*", async (c) => {
       });
     }
 
-    // Cache miss — scrape, clean, convert (single cheerio parse)
+    // Cache miss — scrape + clean with HTMLRewriter (streaming, no DOM)
     const scraped = await scrape(targetUrl);
-    const {
-      cleanedHtml: cleaned,
-      title: readabilityTitle,
-      excerpt: readabilityExcerpt,
-    } = cleanHtml(scraped.$, targetUrl, scraped.rawHtml);
-    const markdown = htmlToMarkdown(cleaned);
 
-    // Prefer Readability's title/excerpt when scraped ones are empty
-    const title = scraped.title || readabilityTitle || "";
-    const description = scraped.description || readabilityExcerpt || "";
+    // 1. Clean HTML with HTMLRewriter (streaming, near-zero CPU)
+    const cleanedHtml = await cleanWithRewriter(scraped.rawHtml, targetUrl);
+
+    // 2. Convert to markdown
+    let markdown = htmlToMarkdown(cleanedHtml);
+    const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+
+    // 3. If HTMLRewriter result is too sparse, try RSC extraction (Next.js)
+    if (wordCount < MIN_WORD_COUNT) {
+      const rscContent = extractRscContent(scraped.rawHtml);
+      if (rscContent) {
+        markdown = htmlToMarkdown(rscContent);
+      }
+    }
+
+    const title = scraped.title || "";
+    const description = scraped.description || "";
 
     const header = buildMetadataHeader(
       targetUrl,
@@ -112,8 +122,8 @@ read.get("/*", async (c) => {
     );
 
     const body = markdown || "No content could be extracted from this URL.";
-    const wordCount = body.split(/\s+/).filter(Boolean).length;
-    const fullResponse = `${header}\nWord Count: ${wordCount}\n\n---\n\n${body}`;
+    const finalWordCount = body.split(/\s+/).filter(Boolean).length;
+    const fullResponse = `${header}\nWord Count: ${finalWordCount}\n\n---\n\n${body}`;
 
     // Store in D1 cache (upsert)
     await c.env.DB.prepare(
