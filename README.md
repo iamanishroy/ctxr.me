@@ -46,19 +46,16 @@ GET /https://example.com
 │  1. Fetch + Metadata                   │
 │  scrape.ts → fetch HTML with browser    │
 │  headers. Extract metadata from <head>  │
-│  via regex (no DOM parsing). Pre-strip  │
-│  <script>/<style>/<svg>/<noscript> and  │
-│  comments before cheerio.load().        │
+│  via regex (no DOM parsing).            │
 │                                         │
 │         ▼                               │
-│  2. Extract Content                     │
-│  html-cleaner.ts → Readability parses   │
-│  the main content, strips nav/ads/      │
-│  sidebars. Falls back to:               │
-│    a) RSC extraction for Next.js pages  │
-│       (regex on raw HTML string)        │
-│    b) Manual content selectors          │
-│       (main, article, #__next, etc.)    │
+│  2. Clean Content (HTMLRewriter)        │
+│  html-rewriter.ts → streaming HTML      │
+│  parser strips nav/header/footer/ads/   │
+│  sidebars/modals by tag, class, ID,     │
+│  and ARIA role. Zero DOM allocation.    │
+│  Falls back to RSC extraction for       │
+│  Next.js pages if content is sparse.    │
 │                                         │
 │         ▼                               │
 │  3. Convert to Markdown                 │
@@ -96,15 +93,14 @@ ctxr/
 │   ├── rate-limit.ts        # IP-based rate limiting (D1)
 │   └── core/
 │       ├── routes.ts        # GET /* handler + D1 caching
-│       ├── scrape.ts        # Fetch + regex metadata + pre-strip HTML
-│       ├── html-cleaner.ts  # Readability + RSC + manual fallback
+│       ├── scrape.ts        # Fetch + regex metadata extraction
+│       ├── html-rewriter.ts # HTMLRewriter streaming content cleaner
+│       ├── selectors.ts     # Non-content CSS selectors (120+)
 │       ├── rsc-extractor.ts # Next.js RSC flight data parser
 │       ├── markdown.ts      # HTML → Markdown pipeline
 │       ├── md-cleaners.ts   # 8 post-processing cleaners
 │       ├── md-translators.ts # Custom code block translators
 │       ├── normalize-url.ts # URL normalization + deduplication
-│       ├── table-utils.ts   # Layout table detection/stripping
-│       ├── url-fixer.ts     # Relative → absolute URL resolution
 │       └── types.ts         # TypeScript interfaces
 ├── schema.sql               # D1 database schema
 ├── wrangler.jsonc            # Cloudflare Workers config
@@ -119,8 +115,7 @@ ctxr/
 | Runtime             | [Cloudflare Workers](https://workers.cloudflare.com/)                                 |
 | Framework           | [Hono](https://hono.dev/)                                                             |
 | Database            | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite)                       |
-| HTML Parsing        | [cheerio](https://cheerio.js.org/)                                                    |
-| Content Extraction  | [@jsr/paoramen\_\_cheer-reader](https://jsr.io/@paoramen/cheer-reader) (Readability)  |
+| HTML Cleaning       | [HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/) (streaming) |
 | Markdown Conversion | [node-html-markdown](https://github.com/crosstype/node-html-markdown)                 |
 | Static Assets       | [Cloudflare Workers Assets](https://developers.cloudflare.com/workers/static-assets/) |
 
