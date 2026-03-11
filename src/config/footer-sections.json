@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Section heading IDs to strip from content. Content from the first matching heading to the end of the document is removed.",
+  "ids": [
+    "references",
+    "external_links",
+    "external-links",
+    "further_reading",
+    "further-reading",
+    "bibliography",
+    "footnotes",
+    "notes",
+    "see_also",
+    "see-also",
+    "citations",
+    "sources",
+    "endnotes",
+    "works_cited",
+    "works-cited"
+  ]
+}

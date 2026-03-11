@@ -1,4 +1,5 @@
 import type { PageMetadata, ScrapedData } from "./types";
+import footerConfig from "../config/footer-sections.json";
 
 /** Max HTML bytes to process — truncate larger pages to stay within CPU limits. */
 const MAX_HTML_BYTES = 256_000; // 256KB
@@ -21,6 +22,11 @@ const FETCH_TIMEOUT = 30000;
 
 /** Content container tags to try extracting (in priority order). */
 const CONTENT_TAGS = ["article", "main"];
+
+/** Pre-build search patterns for footer section IDs (runs once at import). */
+const FOOTER_PATTERNS = footerConfig.ids.map(
+  (id) => `id="${id}"`,
+);
 
 /**
  * Extract <article> or <main> from raw HTML using indexOf scanning.
@@ -62,8 +68,34 @@ function extractContentContainer(html: string): string | null {
 }
 
 /**
+ * Strip footer sections (References, External links, etc.) by heading ID.
+ * Finds the earliest footer heading and cuts everything from that point.
+ */
+function stripFooterSections(html: string): string {
+  const lowerHtml = html.toLowerCase();
+  let earliestCut = -1;
+
+  for (const pattern of FOOTER_PATTERNS) {
+    const idx = lowerHtml.indexOf(pattern);
+    if (idx > 0 && (earliestCut === -1 || idx < earliestCut)) {
+      earliestCut = idx;
+    }
+  }
+
+  if (earliestCut === -1) return html;
+
+  // Walk backwards to find the opening tag of the heading (e.g. <h2)
+  const headingStart = lowerHtml.lastIndexOf("<h", earliestCut);
+  if (headingStart > 0) {
+    return html.substring(0, headingStart);
+  }
+
+  return html.substring(0, earliestCut);
+}
+
+/**
  * Fetches HTML from a URL and extracts metadata via regex (no DOM parsing).
- * Extracts content container and truncates before returning.
+ * Pipeline: extract content container → strip footer sections → truncate.
  */
 export async function scrape(url: string): Promise<ScrapedData> {
   const controller = new AbortController();
@@ -107,10 +139,13 @@ export async function scrape(url: string): Promise<ScrapedData> {
 
     const metadata = extractMetadata(headHtml, url);
 
-    // Phase 1: Try to extract just the content container (before truncation)
+    // Phase 1: Extract content container (<article> or <main>)
     let rawHtml = extractContentContainer(fullHtml) || fullHtml;
 
-    // Phase 2: Truncate oversized HTML to stay within CPU limits
+    // Phase 2: Strip footer sections (References, External links, etc.)
+    rawHtml = stripFooterSections(rawHtml);
+
+    // Phase 3: Truncate as safety net (should rarely trigger now)
     if (rawHtml.length > MAX_HTML_BYTES) {
       const cutPoint = rawHtml.lastIndexOf(">", MAX_HTML_BYTES);
       rawHtml = rawHtml.substring(0, cutPoint > 0 ? cutPoint + 1 : MAX_HTML_BYTES);
