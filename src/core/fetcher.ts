@@ -70,6 +70,16 @@ export async function fetchPage(url: string): Promise<FetchResult> {
 
     const metadata = extractMetadata(headHtml, url);
 
+    // Enrich metadata with JSON-LD (may be in <head> or <body>)
+    const jsonLd = extractJsonLd(html);
+    if (jsonLd) {
+      metadata.author = metadata.author || jsonLd.author;
+      metadata.datePublished = jsonLd.datePublished;
+      metadata.dateModified = jsonLd.dateModified;
+      metadata.publisher = jsonLd.publisher;
+      metadata.image = metadata.image || jsonLd.image;
+    }
+
     return { html, title, description, metadata };
   } catch (error) {
     clearTimeout(timeoutId);
@@ -122,7 +132,51 @@ function extractMetadata(html: string, baseUrl: string): PageMetadata {
     })(),
     ogType: extractMeta(html, "og:type") || undefined,
     ogSiteName: extractMeta(html, "og:site_name") || undefined,
+    image: extractMeta(html, "og:image") || undefined,
   };
+}
+
+/** Extract structured data from JSON-LD script tags. */
+function extractJsonLd(
+  html: string,
+): Partial<PageMetadata> | null {
+  const match = html.match(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i,
+  );
+  if (!match) return null;
+
+  try {
+    const data = JSON.parse(match[1]);
+    // Handle @graph arrays (some sites wrap in a graph)
+    const obj = Array.isArray(data?.["@graph"])
+      ? data["@graph"].find(
+          (item: Record<string, unknown>) =>
+            item["@type"] === "Article" ||
+            item["@type"] === "WebPage" ||
+            item["@type"] === "BlogPosting" ||
+            item["@type"] === "NewsArticle",
+        ) || data
+      : data;
+
+    return {
+      author:
+        typeof obj.author === "string"
+          ? obj.author
+          : obj.author?.name || undefined,
+      datePublished: obj.datePublished || undefined,
+      dateModified: obj.dateModified || undefined,
+      publisher:
+        typeof obj.publisher === "string"
+          ? obj.publisher
+          : obj.publisher?.name || undefined,
+      image:
+        typeof obj.image === "string"
+          ? obj.image
+          : obj.image?.url || undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function resolveUrl(

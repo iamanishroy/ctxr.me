@@ -27,6 +27,9 @@ export function buildMetadataHeader(
     lines.push(`Canonical URL: ${metadata.canonical}`);
   }
   if (metadata?.ogType) lines.push(`Content Type: ${metadata.ogType}`);
+  if (metadata?.datePublished) lines.push(`Published: ${metadata.datePublished}`);
+  if (metadata?.dateModified) lines.push(`Modified: ${metadata.dateModified}`);
+  if (metadata?.publisher) lines.push(`Publisher: ${metadata.publisher}`);
   if (metadata?.keywords?.length) {
     lines.push(`Keywords: ${metadata.keywords.join(", ")}`);
   }

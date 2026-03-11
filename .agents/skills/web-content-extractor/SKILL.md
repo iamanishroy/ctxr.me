@@ -32,18 +32,22 @@ All numeric limits and filter lists are in JSON config files (`src/config/`), no
 
 ## Stage 1: Fetch + Metadata (`fetcher.ts`)
 
-Fetch HTML with browser-like headers. Extract metadata from `<head>` section only using fast regex — **no DOM parsing**.
+Fetch HTML with browser-like headers. Extract metadata from `<head>` via regex, then enrich with **JSON-LD** structured data (`<script type="application/ld+json">`).
+
+JSON-LD provides: `datePublished`, `dateModified`, `publisher`, `author`, `image`. Handles `@graph` arrays and nested objects. Used as **fallback** — meta tags take priority.
 
 ```typescript
 export async function fetchPage(url: string): Promise<FetchResult> {
-  // Fetch with timeout from limits.json
   const html = await response.text();
+  const metadata = extractMetadata(headHtml, url);
 
-  // Extract metadata from <head> only — much smaller search surface
-  const headEnd = html.indexOf("</head>");
-  const headHtml = headEnd > 0 ? html.substring(0, headEnd) : html.substring(0, 10_000);
-
-  const title = extractMeta(headHtml, "og:title") || ...;
+  // Enrich with JSON-LD (may be in <head> or <body>)
+  const jsonLd = extractJsonLd(html);
+  if (jsonLd) {
+    metadata.author = metadata.author || jsonLd.author;
+    metadata.datePublished = jsonLd.datePublished;
+    // ...
+  }
   return { html, title, description, metadata };
 }
 ```
@@ -126,10 +130,24 @@ See the `ctxr` project at `/Users/anish/Desktop/Developer/ctxr/src/`:
 
 - `config/` — JSON config files (limits, selectors, footer sections, containers)
 - `core/pipeline.ts` — Orchestrator
-- `core/fetcher.ts` — HTTP fetch + metadata
+- `core/fetcher.ts` — HTTP fetch + metadata + JSON-LD
 - `core/extractor.ts` — Content extraction + footer stripping
 - `core/html-rewriter.ts` — HTMLRewriter streaming cleaner
 - `core/selectors.ts` — Loads selectors from JSON
 - `core/rsc-extractor.ts` — Next.js RSC parser
 - `core/formatter.ts` — Response formatting
 - `core/markdown.ts` — HTML → Markdown + cleaners
+
+## Testing
+
+Unit tests with [Vitest](https://vitest.dev/), using HTML fixtures:
+
+```bash
+yarn test    # 29 tests, ~150ms
+```
+
+| Test file | Coverage |
+|---|---|
+| `extractor.test.ts` | Container extraction, footer stripping, truncation |
+| `formatter.test.ts` | Metadata header, word truncation, response assembly |
+| `md-cleaners.test.ts` | All 8 post-processing cleaners |

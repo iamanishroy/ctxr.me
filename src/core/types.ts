@@ -9,6 +9,10 @@ export interface PageMetadata {
   keywords?: string[];
   ogType?: string;
   ogSiteName?: string;
+  datePublished?: string;
+  dateModified?: string;
+  publisher?: string;
+  image?: string;
 }
 
 /** Result from fetchPage() — raw HTML + parsed metadata. */

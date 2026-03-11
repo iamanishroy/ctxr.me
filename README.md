@@ -47,7 +47,7 @@ GET /https://example.com
 │                                         │
 │  1. fetcher.ts                          │
 │     Fetch HTML, extract metadata from   │
-│     <head> via regex (no DOM parsing)   │
+│     <head> via regex + JSON-LD          │
 │                                         │
 │  2. extractor.ts                        │
 │     Extract <article>/<main> container  │
@@ -89,7 +89,7 @@ ctxr/
 │   │   └── content-containers.json # Container tags to extract
 │   └── core/
 │       ├── pipeline.ts      # Extraction orchestrator (entry point)
-│       ├── fetcher.ts       # HTTP fetch + regex metadata
+│       ├── fetcher.ts       # HTTP fetch + metadata + JSON-LD
 │       ├── extractor.ts     # Content extraction + footer stripping
 │       ├── html-rewriter.ts # HTMLRewriter streaming cleaner
 │       ├── selectors.ts     # Loads selectors from JSON config
@@ -101,6 +101,11 @@ ctxr/
 │       ├── normalize-url.ts # URL normalization + deduplication
 │       ├── routes.ts        # Thin HTTP handler (cache + pipeline)
 │       └── types.ts         # TypeScript interfaces
+├── tests/
+│   ├── fixtures/            # HTML snippets for deterministic tests
+│   ├── extractor.test.ts    # Container extraction + footer stripping
+│   ├── formatter.test.ts    # Metadata header + word truncation
+│   └── md-cleaners.test.ts  # All 8 post-processing cleaners
 ├── schema.sql               # D1 database schema
 ├── wrangler.jsonc            # Cloudflare Workers config
 └── .github/workflows/
@@ -116,6 +121,8 @@ ctxr/
 | Database            | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite)                       |
 | HTML Cleaning       | [HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/) (streaming) |
 | Markdown Conversion | [node-html-markdown](https://github.com/crosstype/node-html-markdown)                 |
+| Structured Data     | JSON-LD (`<script type="application/ld+json">`)                                        |
+| Testing             | [Vitest](https://vitest.dev/)                                                         |
 | Static Assets       | [Cloudflare Workers Assets](https://developers.cloudflare.com/workers/static-assets/) |
 
 ---
@@ -154,6 +161,9 @@ curl http://localhost:8787/ok
 
 # Convert a URL
 curl http://localhost:8787/https://example.com
+
+# Run unit tests
+yarn test
 ```
 
 ---
