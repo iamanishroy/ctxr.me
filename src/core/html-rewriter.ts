@@ -30,8 +30,6 @@ const EXCLUDE_PATTERNS: ExcludePattern[] = EXCLUDE_SELECTORS.map(
   },
 );
 
-const MIN_EXTRACT_WORDS = 50;
-
 /**
  * Streaming content cleaner — removes non-content elements.
  * Matches elements against pre-parsed exclude patterns.
@@ -107,64 +105,8 @@ class LinkNormalizeHandler implements HTMLRewriterElementContentHandlers {
 }
 
 /**
- * Extract content from <article> or <main> containers.
- * Uses indexOf-based scanning with nesting awareness — no DOM, no regex.
- * Returns the first container with ≥50 words, or null if none found.
- */
-function extractContentContainer(html: string): string | null {
-  const lowerHtml = html.toLowerCase();
-  const CONTENT_TAGS = ["article", "main"];
-
-  for (const tag of CONTENT_TAGS) {
-    const openTag = `<${tag}`;
-    const closeTag = `</${tag}>`;
-
-    const startIdx = lowerHtml.indexOf(openTag);
-    if (startIdx === -1) continue;
-
-    // Find the matching closing tag, handling nested same-name tags
-    let depth = 1;
-    let searchFrom = startIdx + openTag.length;
-
-    while (depth > 0 && searchFrom < lowerHtml.length) {
-      const nextOpen = lowerHtml.indexOf(openTag, searchFrom);
-      const nextClose = lowerHtml.indexOf(closeTag, searchFrom);
-
-      if (nextClose === -1) break; // Unclosed tag
-
-      if (nextOpen !== -1 && nextOpen < nextClose) {
-        depth++;
-        searchFrom = nextOpen + openTag.length;
-      } else {
-        depth--;
-        if (depth === 0) {
-          const endIdx = nextClose + closeTag.length;
-          const extracted = html.substring(startIdx, endIdx);
-
-          // Only use if it has substantial content
-          const wordCount = extracted
-            .replace(/<[^>]*>/g, "")
-            .split(/\s+/)
-            .filter(Boolean).length;
-
-          if (wordCount >= MIN_EXTRACT_WORDS) {
-            return extracted;
-          }
-        }
-        searchFrom = nextClose + closeTag.length;
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
  * Clean HTML using Cloudflare's streaming HTMLRewriter.
- *
- * Two-phase approach:
- * 1. HTMLRewriter strips known non-content elements (streaming, near-zero CPU)
- * 2. Extract <article> or <main> container if present (string scanning, no DOM)
+ * Content container extraction happens upstream in scrape.ts.
  */
 export async function cleanWithRewriter(
   rawHtml: string,
@@ -180,9 +122,5 @@ export async function cleanWithRewriter(
     headers: { "content-type": "text/html" },
   });
 
-  const cleaned = await rewriter.transform(response).text();
-
-  // Phase 2: try to extract just the main content container
-  return extractContentContainer(cleaned) || cleaned;
+  return await rewriter.transform(response).text();
 }
-

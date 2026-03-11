@@ -1,7 +1,7 @@
 import type { PageMetadata, ScrapedData } from "./types";
 
 /** Max HTML bytes to process — truncate larger pages to stay within CPU limits. */
-const MAX_HTML_BYTES = 512_000; // 512KB
+const MAX_HTML_BYTES = 256_000; // 256KB
 
 /** Max words in the final markdown response — prevents abuse with huge pages. */
 export const MAX_RESPONSE_WORDS = 10_000;
@@ -19,8 +19,51 @@ const BROWSER_HEADERS = {
 
 const FETCH_TIMEOUT = 30000;
 
+/** Content container tags to try extracting (in priority order). */
+const CONTENT_TAGS = ["article", "main"];
+
+/**
+ * Extract <article> or <main> from raw HTML using indexOf scanning.
+ * Runs BEFORE truncation so large pages get narrowed to just the content area.
+ */
+function extractContentContainer(html: string): string | null {
+  const lowerHtml = html.toLowerCase();
+
+  for (const tag of CONTENT_TAGS) {
+    const openTag = `<${tag}`;
+    const closeTag = `</${tag}>`;
+
+    const startIdx = lowerHtml.indexOf(openTag);
+    if (startIdx === -1) continue;
+
+    let depth = 1;
+    let searchFrom = startIdx + openTag.length;
+
+    while (depth > 0 && searchFrom < lowerHtml.length) {
+      const nextOpen = lowerHtml.indexOf(openTag, searchFrom);
+      const nextClose = lowerHtml.indexOf(closeTag, searchFrom);
+
+      if (nextClose === -1) break;
+
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        searchFrom = nextOpen + openTag.length;
+      } else {
+        depth--;
+        if (depth === 0) {
+          return html.substring(startIdx, nextClose + closeTag.length);
+        }
+        searchFrom = nextClose + closeTag.length;
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Fetches HTML from a URL and extracts metadata via regex (no DOM parsing).
+ * Extracts content container and truncates before returning.
  */
 export async function scrape(url: string): Promise<ScrapedData> {
   const controller = new AbortController();
@@ -48,11 +91,11 @@ export async function scrape(url: string): Promise<ScrapedData> {
       throw new Error(`Unsupported content type: ${contentType}`);
     }
 
-    let rawHtml = await response.text();
+    const fullHtml = await response.text();
 
     // Extract metadata from <head> only — much smaller search surface
-    const headEnd = rawHtml.indexOf("</head>");
-    const headHtml = headEnd > 0 ? rawHtml.substring(0, headEnd) : rawHtml.substring(0, 10_000);
+    const headEnd = fullHtml.indexOf("</head>");
+    const headHtml = headEnd > 0 ? fullHtml.substring(0, headEnd) : fullHtml.substring(0, 10_000);
 
     const title = extractMeta(headHtml, "og:title") ||
       extractMeta(headHtml, "twitter:title") ||
@@ -64,9 +107,11 @@ export async function scrape(url: string): Promise<ScrapedData> {
 
     const metadata = extractMetadata(headHtml, url);
 
-    // Truncate oversized HTML to stay within CPU limits
+    // Phase 1: Try to extract just the content container (before truncation)
+    let rawHtml = extractContentContainer(fullHtml) || fullHtml;
+
+    // Phase 2: Truncate oversized HTML to stay within CPU limits
     if (rawHtml.length > MAX_HTML_BYTES) {
-      // Try to break at a tag boundary to avoid malformed HTML
       const cutPoint = rawHtml.lastIndexOf(">", MAX_HTML_BYTES);
       rawHtml = rawHtml.substring(0, cutPoint > 0 ? cutPoint + 1 : MAX_HTML_BYTES);
     }

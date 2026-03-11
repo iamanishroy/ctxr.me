@@ -1,7 +1,7 @@
 ---
 name: web-content-extractor
 description: Extract clean, LLM-friendly markdown from any web page. Handles standard HTML, React Server Components (RSC/Next.js), and client-side rendered pages. Use when building scrapers, content pipelines, or reader-mode features.
-version: 2.0.0
+version: 2.2.0
 ---
 
 # Web Content Extraction
@@ -11,29 +11,45 @@ A multi-stage pipeline for converting web pages to clean markdown. Designed for 
 ## Architecture
 
 ```
-Raw HTML → HTMLRewriter (streaming clean) → Markdown → Post-process
-                                                ↓ (sparse result?)
-                                           RSC Extractor (Next.js)
+Raw HTML → Metadata from <head>
+    → Extract <article>/<main> container
+    → Truncate at 256KB
+    → HTMLRewriter (streaming clean)
+    → Markdown → Post-process → Cap at 10,000 words
+                                    ↓ (sparse result?)
+                               RSC Extractor (Next.js)
 ```
 
 ## Stage 1: Fetch + Metadata
 
-Fetch HTML with browser-like headers. Extract metadata from `<head>` using fast regex — **no DOM parsing**.
+Fetch HTML with browser-like headers. Extract metadata from `<head>` section only (not full HTML) using fast regex — **no DOM parsing**.
 
 ```typescript
-function extractMeta(html: string, name: string): string {
-  const re = new RegExp(
-    `<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']*?)["']`,
-    "i",
-  );
-  return html.match(re)?.[1] || "";
-}
+// Extract <head> for metadata — much smaller search surface
+const headEnd = rawHtml.indexOf("</head>");
+const headHtml = headEnd > 0 ? rawHtml.substring(0, headEnd) : rawHtml.substring(0, 10_000);
 
-const title = extractMeta(rawHtml, "og:title") ||
-  rawHtml.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "";
+const title = extractMeta(headHtml, "og:title") ||
+  headHtml.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "";
 ```
 
-> **Important:** No cheerio or DOM parsing is used for metadata. This alone saves significant CPU time.
+After metadata extraction, extract the content container and truncate:
+
+```typescript
+const CONTENT_TAGS = ["article", "main"];
+
+// Phase 1: Extract content container from FULL HTML (before truncation)
+let rawHtml = extractContentContainer(fullHtml) || fullHtml;
+
+// Phase 2: Truncate to stay within CPU limits
+const MAX_HTML_BYTES = 256_000; // 256KB
+if (rawHtml.length > MAX_HTML_BYTES) {
+  const cutPoint = rawHtml.lastIndexOf(">", MAX_HTML_BYTES);
+  rawHtml = rawHtml.substring(0, cutPoint > 0 ? cutPoint + 1 : MAX_HTML_BYTES);
+}
+```
+
+> **Important:** Content container extraction runs on the FULL HTML before truncation. This narrows a 947KB Wikipedia page to its ~300KB `<main>` block, then truncates to 256KB. Much less for downstream processing.
 
 ## Stage 2: Content Cleaning (HTMLRewriter)
 
@@ -65,8 +81,6 @@ class MainContentHandler implements HTMLRewriterElementContentHandlers {
 
 Converts relative URLs to absolute for `<a>`, `<img>`, and `<link>` tags.
 
-### Usage
-
 ```typescript
 export async function cleanWithRewriter(rawHtml: string, baseUrl: string): Promise<string> {
   const rewriter = new HTMLRewriter()
@@ -74,12 +88,11 @@ export async function cleanWithRewriter(rawHtml: string, baseUrl: string): Promi
     .on("a[href]", new LinkNormalizeHandler(baseUrl))
     .on("img[src]", new LinkNormalizeHandler(baseUrl));
 
-  const response = new Response(rawHtml, { headers: { "content-type": "text/html" } });
-  return await rewriter.transform(response).text();
+  return await rewriter.transform(new Response(rawHtml)).text();
 }
 ```
 
-> **Key advantage:** HTMLRewriter is built into the Workers runtime. It processes HTML in a single streaming pass with near-zero CPU overhead — no DOM tree, no memory allocation for parsed nodes.
+> **Key advantage:** Content container extraction happens upstream in `scrape.ts`, so HTMLRewriter only processes the extracted `<article>`/`<main>` content (not the full page).
 
 ## Stage 2b: RSC Extraction (Next.js fallback)
 
@@ -117,11 +130,17 @@ Use `node-html-markdown` with custom code block translators that handle language
 
 > **Performance tip:** Pre-compile all regex patterns at module level, not inside functions.
 
-## CPU Optimization Notes
+## CPU Optimization & Hard Limits
+
+| Limit | Value | Purpose |
+|---|---|---|
+| HTML truncation | 256KB | Caps HTML fed to HTMLRewriter + markdown converter |
+| Metadata from `<head>` only | ~first few KB | Avoids regex on full HTML |
+| Markdown word cap | 10,000 words | Prevents abuse; truncates at paragraph boundary |
+| Rate limit | 10 req/min/IP | Prevents scraping abuse |
 
 - **HTMLRewriter** is the single biggest optimization — streaming vs DOM parsing
-- **Regex metadata** from `<head>` — avoids cheerio entirely  
-- **RSC extraction** on raw HTML string — no DOM dependency
+- **Content container extraction** — scans for `<article>` / `<main>` after HTMLRewriter cleaning
 - **Pre-compiled regex** in post-processing cleaners
 - **No cheerio, no Readability** in the critical path
 

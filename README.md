@@ -47,6 +47,8 @@ GET /https://example.com
 │  scrape.ts → fetch HTML with browser    │
 │  headers. Extract metadata from <head>  │
 │  via regex (no DOM parsing).            │
+│  Extract <article>/<main> container.    │
+│  Truncate to 256KB hard limit.          │
 │                                         │
 │         ▼                               │
 │  2. Clean Content (HTMLRewriter)        │
@@ -54,8 +56,8 @@ GET /https://example.com
 │  parser strips nav/header/footer/ads/   │
 │  sidebars/modals by tag, class, ID,     │
 │  and ARIA role. Zero DOM allocation.    │
-│  Falls back to RSC extraction for       │
-│  Next.js pages if content is sparse.    │
+│  Falls back to RSC for Next.js pages    │
+│  if content is sparse.                  │
 │                                         │
 │         ▼                               │
 │  3. Convert to Markdown                 │
@@ -63,16 +65,10 @@ GET /https://example.com
 │  converts clean HTML to markdown        │
 │                                         │
 │         ▼                               │
-│  4. Post-process                        │
-│  md-cleaners.ts → 8-stage pipeline:     │
-│    • fix multi-line links               │
-│    • remove nav aids (skip to content)  │
-│    • remove empty links                 │
-│    • clean broken/layout tables         │
-│    • truncate long alt text             │
-│    • collapse duplicate headings        │
-│    • fix code block formatting          │
-│    • remove excessive newlines          │
+│  4. Post-process + Enforce Limits       │
+│  md-cleaners.ts → 8-stage pipeline      │
+│  Cap output at 10,000 words to          │
+│  prevent abuse and cap CPU time.        │
 │                                         │
 │         ▼                               │
 │  Return clean markdown                  │
@@ -93,8 +89,8 @@ ctxr/
 │   ├── rate-limit.ts        # IP-based rate limiting (D1)
 │   └── core/
 │       ├── routes.ts        # GET /* handler + D1 caching
-│       ├── scrape.ts        # Fetch + regex metadata extraction
-│       ├── html-rewriter.ts # HTMLRewriter streaming content cleaner
+│       ├── scrape.ts        # Fetch + metadata + content extraction + limits
+│       ├── html-rewriter.ts # HTMLRewriter streaming cleaner
 │       ├── selectors.ts     # Non-content CSS selectors (120+)
 │       ├── rsc-extractor.ts # Next.js RSC flight data parser
 │       ├── markdown.ts      # HTML → Markdown pipeline
