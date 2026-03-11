@@ -1,5 +1,11 @@
 import type { PageMetadata, ScrapedData } from "./types";
 
+/** Max HTML bytes to process — truncate larger pages to stay within CPU limits. */
+const MAX_HTML_BYTES = 512_000; // 512KB
+
+/** Max words in the final markdown response — prevents abuse with huge pages. */
+export const MAX_RESPONSE_WORDS = 10_000;
+
 const BROWSER_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -42,18 +48,28 @@ export async function scrape(url: string): Promise<ScrapedData> {
       throw new Error(`Unsupported content type: ${contentType}`);
     }
 
-    const rawHtml = await response.text();
+    let rawHtml = await response.text();
 
-    // Extract metadata with regex — zero DOM cost
-    const title = extractMeta(rawHtml, "og:title") ||
-      extractMeta(rawHtml, "twitter:title") ||
-      rawHtml.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "";
+    // Extract metadata from <head> only — much smaller search surface
+    const headEnd = rawHtml.indexOf("</head>");
+    const headHtml = headEnd > 0 ? rawHtml.substring(0, headEnd) : rawHtml.substring(0, 10_000);
+
+    const title = extractMeta(headHtml, "og:title") ||
+      extractMeta(headHtml, "twitter:title") ||
+      headHtml.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "";
 
     const description =
-      extractMeta(rawHtml, "description") ||
-      extractMeta(rawHtml, "og:description") || "";
+      extractMeta(headHtml, "description") ||
+      extractMeta(headHtml, "og:description") || "";
 
-    const metadata = extractMetadata(rawHtml, url);
+    const metadata = extractMetadata(headHtml, url);
+
+    // Truncate oversized HTML to stay within CPU limits
+    if (rawHtml.length > MAX_HTML_BYTES) {
+      // Try to break at a tag boundary to avoid malformed HTML
+      const cutPoint = rawHtml.lastIndexOf(">", MAX_HTML_BYTES);
+      rawHtml = rawHtml.substring(0, cutPoint > 0 ? cutPoint + 1 : MAX_HTML_BYTES);
+    }
 
     return { title, description, rawHtml, metadata };
   } catch (error) {

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { scrape } from "./scrape";
+import { scrape, MAX_RESPONSE_WORDS } from "./scrape";
 import { cleanWithRewriter } from "./html-rewriter";
 import { extractRscContent } from "./rsc-extractor";
 import { htmlToMarkdown } from "./markdown";
@@ -62,6 +62,18 @@ function buildMetadataHeader(
   return lines.join("\n");
 }
 
+/** Truncate markdown to MAX_RESPONSE_WORDS, breaking at a paragraph boundary. */
+function truncateMarkdown(md: string): string {
+  const words = md.split(/\s+/);
+  if (words.length <= MAX_RESPONSE_WORDS) return md;
+
+  const truncated = words.slice(0, MAX_RESPONSE_WORDS).join(" ");
+  // Try to break at a paragraph boundary (double newline)
+  const lastParagraph = truncated.lastIndexOf("\n\n");
+  const cutpoint = lastParagraph > truncated.length * 0.8 ? lastParagraph : truncated.length;
+  return truncated.substring(0, cutpoint) + "\n\n---\n*Content truncated at " + MAX_RESPONSE_WORDS.toLocaleString() + " words.*";
+}
+
 const MIN_WORD_COUNT = 50;
 
 /**
@@ -110,6 +122,9 @@ read.get("/*", async (c) => {
         markdown = htmlToMarkdown(rscContent);
       }
     }
+
+    // 4. Enforce word limit to prevent abuse and cap CPU
+    markdown = truncateMarkdown(markdown);
 
     const title = scraped.title || "";
     const description = scraped.description || "";
