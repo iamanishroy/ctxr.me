@@ -98,6 +98,16 @@
       ".reflist", ".references", ".reference",
       ".mw-references-wrap", ".citation",
       ".cite-backlink", ".noprint"
+    ],
+
+    "infoboxes": [
+      ".infobox", ".infobox_v2", ".infobox_v3",
+      ".sidebar", ".sidebar-content",
+      ".vcard", ".geo", ".hatnote",
+      ".ambox", ".tmbox", ".ombox",
+      ".navbox", ".navbox-inner",
+      ".catlinks", "#catlinks",
+      ".mw-editsection"
     ]
   }
 }

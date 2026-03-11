@@ -1,36 +1,14 @@
 /**
  * Post-processing functions that clean up raw markdown output.
  * Each function handles one specific concern.
+ * Phrase lists loaded from config/cleaner-patterns.json.
  * All regex patterns are pre-compiled at module level for CPU efficiency.
  */
 
-// --- Pre-compiled patterns for removeNavigationAidLinks ---
-const NAV_PHRASES = [
-  "skip to content",
-  "return to top",
-  "back to top",
-  "scroll to top",
-  "go to top",
-  "top",
-  "previous page",
-  "next page",
-  "jump to",
-  "back to home",
-  "home",
-];
-const COPY_PHRASES = [
-  "copy page",
-  "copy page content",
-  "copy page content to clipboard",
-  "copy to clipboard",
-  "share this page",
-  "share on",
-  "print this page",
-  "download pdf",
-  "report an issue",
-  "improve this page",
-  "edit this page",
-];
+import patterns from "../config/cleaner-patterns.json";
+
+// --- Pre-compiled patterns from JSON config ---
+
 const buildPhraseRegex = (phrases: string[]) =>
   new RegExp(
     phrases
@@ -41,8 +19,10 @@ const buildPhraseRegex = (phrases: string[]) =>
       .join("|"),
     "gim",
   );
-const NAV_RE = buildPhraseRegex(NAV_PHRASES);
-const COPY_RE = buildPhraseRegex(COPY_PHRASES);
+
+const NAV_RE = buildPhraseRegex(patterns.navigationPhrases);
+const COPY_RE = buildPhraseRegex(patterns.copyPhrases);
+
 const SKIP_LINK_RE = /\[(Skip to Content)\]\(#[^)]*\)/gi;
 const BACK_TOP_RE =
   /\[(Return to top|Back to top|Scroll to top|Go to top|Top)\]\(#[^)]*\)/gi;
@@ -57,6 +37,21 @@ const CODE_RE2 = new RegExp(`^(${LANG_PATTERN})\\n\\n\`\`\`\\n`, "gm");
 const CODE_RE3 = new RegExp(`^${FILE_PATH_PATTERN}\\n\`\`\`\\n`, "gm");
 const CODE_RE4 = new RegExp(`^${FILE_PATH_PATTERN}\\n\\n\`\`\`\\n`, "gm");
 const CODE_RE5 = new RegExp(`^${FILE_PATH_PATTERN}\\s*\`\`\`\\n`, "gm");
+
+// --- Pre-compiled patterns for link/marker/escape cleaners ---
+const INLINE_LINK_RE = /\[([^\]]+)\]\([^)]+\)/g;
+const EDIT_MARKER_RE = new RegExp(
+  `\\[\\s*(?:${patterns.editMarkers.join("|")})\\s*\\]`,
+  "g",
+);
+const CITATION_RE = new RegExp(
+  `\\[\\s*(?:${patterns.citationMarkers.map((m) => m.replace(/\?/g, "\\?")).join("|")})\\s*\\]`,
+  "gi",
+);
+const REF_NUMBER_RE = /\[\d{1,3}\]/g;
+const BACKSLASH_RE = /\\([.,:;!?'"()\[\]{}|\\*_~`#>+\-])/g;
+
+// ─── Cleaners ─────────────────────────────────────────────
 
 /** Escape newlines inside markdown link text so multi-line links render correctly. */
 export function processMultiLineLinks(md: string): string {
@@ -117,7 +112,8 @@ export function cleanBrokenTables(md: string): string {
       .map((c) => c.trim())
       .filter(
         (_, idx, arr) =>
-          idx > 0 && idx < arr.length - (trimmed.endsWith("|") ? 1 : 0),
+          idx > 0 &&
+          idx < arr.length - (trimmed.endsWith("|") ? 1 : 0),
       );
 
     const nonEmpty = cells.filter((c) => c.length > 0);
@@ -152,12 +148,14 @@ export function cleanBrokenTables(md: string): string {
   return result.join("\n");
 }
 
-/** Truncate image alt text longer than 120 characters. */
+/** Truncate image alt text longer than configured max. */
 export function truncateLongAltText(md: string): string {
+  const max = patterns.maxAltTextLength;
+  const re = new RegExp(`!\\[([^\\]]{${max + 1},})\\]\\(([^)]+)\\)`, "g");
   return md.replace(
-    /!\[([^\]]{121,})\]\(([^)]+)\)/g,
+    re,
     (_match, alt: string, url: string) =>
-      `![${alt.substring(0, 117).trim()}...](${url})`,
+      `![${alt.substring(0, max - 3).trim()}...](${url})`,
   );
 }
 
@@ -196,4 +194,32 @@ export function fixCodeBlockFormatting(md: string): string {
 /** Collapse 3+ consecutive newlines down to 2. */
 export function removeExcessiveNewlines(md: string): string {
   return md.replace(/\n{3,}/g, "\n\n");
+}
+
+/**
+ * Strip inline markdown links, keeping only the display text.
+ * `[Shah Rukh Khan](url)` → `Shah Rukh Khan`
+ * Preserves image links `![alt](url)` — only strips text links.
+ */
+export function stripInlineLinks(md: string): string {
+  return md.replace(INLINE_LINK_RE, "$1");
+}
+
+/**
+ * Remove editorial markers: [edit], [1], [2], [citation needed], etc.
+ * These are Wikipedia/wiki navigation artifacts that add noise for LLMs.
+ */
+export function removeEditMarkers(md: string): string {
+  return md
+    .replace(EDIT_MARKER_RE, "")
+    .replace(CITATION_RE, "")
+    .replace(REF_NUMBER_RE, "");
+}
+
+/**
+ * Fix stray backslash escapes from markdown conversion.
+ * `1959\.` → `1959.`, `Khan\'s` → `Khan's`
+ */
+export function fixBackslashEscapes(md: string): string {
+  return md.replace(BACKSLASH_RE, "$1");
 }

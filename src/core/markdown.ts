@@ -8,6 +8,9 @@ import {
   collapseRedundantHeadings,
   fixCodeBlockFormatting,
   removeExcessiveNewlines,
+  stripInlineLinks,
+  removeEditMarkers,
+  fixBackslashEscapes,
 } from "./md-cleaners";
 
 /**
@@ -24,10 +27,13 @@ export function htmlToMarkdown(html: string): string {
   md = processMultiLineLinks(md);
   md = removeNavigationAidLinks(md);
   md = removeEmptyLinks(md);
+  md = stripInlineLinks(md);       // [text](url) → text
+  md = removeEditMarkers(md);      // [edit], [1], [citation needed]
   md = cleanBrokenTables(md);
   md = truncateLongAltText(md);
   md = collapseRedundantHeadings(md);
   md = fixCodeBlockFormatting(md);
+  md = fixBackslashEscapes(md);    // \. → .
   md = removeExcessiveNewlines(md);
 
   return md.trim();

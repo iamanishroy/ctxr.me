@@ -8,6 +8,9 @@ import {
   collapseRedundantHeadings,
   fixCodeBlockFormatting,
   removeExcessiveNewlines,
+  stripInlineLinks,
+  removeEditMarkers,
+  fixBackslashEscapes,
 } from "../src/core/md-cleaners";
 
 describe("processMultiLineLinks", () => {
@@ -96,5 +99,67 @@ describe("removeExcessiveNewlines", () => {
     const input = "Line 1\n\nLine 2";
     const result = removeExcessiveNewlines(input);
     expect(result).toBe("Line 1\n\nLine 2");
+  });
+});
+
+describe("stripInlineLinks", () => {
+  it("strips links, keeping display text", () => {
+    const input = "[Shah Rukh Khan](https://en.wikipedia.org/wiki/SRK) is an actor.";
+    const result = stripInlineLinks(input);
+    expect(result).toBe("Shah Rukh Khan is an actor.");
+  });
+
+  it("preserves image links", () => {
+    const input = "![Alt text](image.png)";
+    const result = stripInlineLinks(input);
+    // Image reference character ! should remain
+    expect(result).toContain("!");
+  });
+
+  it("handles multiple links in one line", () => {
+    const input = "[A](url1) and [B](url2) are friends.";
+    const result = stripInlineLinks(input);
+    expect(result).toBe("A and B are friends.");
+  });
+});
+
+describe("removeEditMarkers", () => {
+  it("removes [edit] markers", () => {
+    const input = "## Early life [edit]\nContent here.";
+    const result = removeEditMarkers(input);
+    expect(result).not.toContain("[edit]");
+    expect(result).toContain("Early life");
+  });
+
+  it("removes citation numbers [1], [2]", () => {
+    const input = "He won 14 awards[1] and appeared in 100 films[2].";
+    const result = removeEditMarkers(input);
+    expect(result).toBe("He won 14 awards and appeared in 100 films.");
+  });
+
+  it("removes [citation needed]", () => {
+    const input = "He is the richest actor[citation needed] in India.";
+    const result = removeEditMarkers(input);
+    expect(result).not.toContain("[citation needed]");
+  });
+});
+
+describe("fixBackslashEscapes", () => {
+  it("fixes escaped periods", () => {
+    const input = "In 1959\\.";
+    const result = fixBackslashEscapes(input);
+    expect(result).toBe("In 1959.");
+  });
+
+  it("fixes escaped punctuation", () => {
+    const input = "Khan\\'s family\\, including his wife\\.";
+    const result = fixBackslashEscapes(input);
+    expect(result).toBe("Khan's family, including his wife.");
+  });
+
+  it("preserves non-escaped text", () => {
+    const input = "Normal text without escapes.";
+    const result = fixBackslashEscapes(input);
+    expect(result).toBe(input);
   });
 });

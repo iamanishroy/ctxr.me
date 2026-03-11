@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Configurable patterns for markdown post-processing cleaners.",
+
+  "navigationPhrases": [
+    "skip to content",
+    "return to top",
+    "back to top",
+    "scroll to top",
+    "go to top",
+    "top",
+    "previous page",
+    "next page",
+    "jump to",
+    "back to home",
+    "home"
+  ],
+
+  "copyPhrases": [
+    "copy page",
+    "copy page content",
+    "copy page content to clipboard",
+    "copy to clipboard",
+    "share this page",
+    "share on",
+    "print this page",
+    "download pdf",
+    "report an issue",
+    "improve this page",
+    "edit this page"
+  ],
+
+  "editMarkers": [
+    "edit",
+    "Edit"
+  ],
+
+  "citationMarkers": [
+    "citation needed",
+    "clarification needed",
+    "when?",
+    "who?",
+    "by whom?",
+    "dubious"
+  ],
+
+  "maxAltTextLength": 120
+}
