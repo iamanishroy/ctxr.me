@@ -1,6 +1,7 @@
 /**
  * Rate limiter middleware — IP-based request throttling.
- * Reads limits from config/limits.json.
+ * Uses a single row per IP with a sliding window counter.
+ * 1 row read + 1 row write per request (vs N reads/writes before).
  */
 
 import { createMiddleware } from "hono/factory";
@@ -22,32 +23,34 @@ export const rateLimiter = () => {
     const now = Math.floor(Date.now() / 1000);
     const windowStart = now - limits.rateLimitWindowSeconds;
 
-    // Clean up expired entries and count current window in a batch
-    const [, countResult] = await c.env.DB.batch([
-      c.env.DB.prepare(
-        "DELETE FROM rate_limits WHERE ip = ? AND timestamp < ?",
-      ).bind(ip, windowStart),
-      c.env.DB.prepare(
-        "SELECT COUNT(*) as count FROM rate_limits WHERE ip = ? AND timestamp >= ?",
-      ).bind(ip, windowStart),
-    ]);
+    // Single UPSERT: resets counter if window expired, else increments.
+    // RETURNING gives us the new count — 1 read + 1 write total.
+    const result = await c.env.DB.prepare(
+      `INSERT INTO rate_limits (ip, count, window_start)
+       VALUES (?, 1, ?)
+       ON CONFLICT(ip) DO UPDATE SET
+         count = CASE
+           WHEN rate_limits.window_start < ? THEN 1
+           ELSE rate_limits.count + 1
+         END,
+         window_start = CASE
+           WHEN rate_limits.window_start < ? THEN ?
+           ELSE rate_limits.window_start
+         END
+       RETURNING count`,
+    )
+      .bind(ip, now, windowStart, windowStart, now)
+      .first<{ count: number }>();
 
-    const count = (countResult.results[0] as { count: number }).count;
+    const count = result?.count ?? 0;
 
-    if (count >= limits.rateLimitRequests) {
+    if (count > limits.rateLimitRequests) {
       return c.json(
         { error: "Rate limit exceeded", retryAfter: limits.rateLimitWindowSeconds },
         429,
         { "Retry-After": String(limits.rateLimitWindowSeconds) },
       );
     }
-
-    // Record this request
-    await c.env.DB.prepare(
-      "INSERT INTO rate_limits (ip, timestamp) VALUES (?, ?)",
-    )
-      .bind(ip, now)
-      .run();
 
     await next();
   });
