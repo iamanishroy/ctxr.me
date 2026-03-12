@@ -6,7 +6,7 @@
 curl ctxr.me/https://news.ycombinator.com
 ```
 
-No auth. No API key. No SDK. Just plain HTTP.
+No auth. No API key. No SDK. Just plain HTTP. Sub-second results.
 
 ---
 
